@@ -1,6 +1,6 @@
 {
     "targets": {
-        "Diff examples": {
+        "elm-multitool-2": {
             "inputs": [
                 "src/Main.elm"
             ],
