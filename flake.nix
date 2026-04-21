@@ -32,9 +32,9 @@
           DEVDIR="$PWD"
           echo -e "\n\033[1m*** Entering development shell for elm-multitool-2 ***\033[0m\n"
 
-          # echo -e -n "Updating repos... "
-          # (cd $DEVDIR && git pull --quiet &)
-          # echo -e "Update complete!\n"
+          echo -e -n "Updating repos... "
+          (cd $DEVDIR && git pull --quiet &)
+          echo -e "Update complete!\n"
           
 
           echo -e "\033[1;36mrun\033[0m: start the development environment"
