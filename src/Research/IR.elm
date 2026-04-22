@@ -14,7 +14,7 @@ type Semaphore
     | Red Bool Bool
 
 
-semaphoreCodec : IRCodec () ()
+semaphoreCodec : IRCodec Semaphore Semaphore
 semaphoreCodec =
     custom
         (\red yellow green value ->
@@ -32,27 +32,42 @@ semaphoreCodec =
         |> variant0 Yellow
         |> variant2 Green bool string
         |> endCustom
+
+
+unitCodec : IRCodec () ()
+unitCodec =
+    semaphoreCodec
         |> contramap (\() -> Yellow)
         |> map (always ())
 
 
-encodeSemaphore : () -> JE.Value
-encodeSemaphore s =
-    encode semaphoreCodec s
+encodeSemaphore : Semaphore -> JE.Value
+encodeSemaphore =
+    encode semaphoreCodec
 
 
-semaphoreDecoder : JD.Decoder ()
+semaphoreDecoder : JD.Decoder Semaphore
 semaphoreDecoder =
     decoder semaphoreCodec
 
 
-encode : IRCodec b b -> b -> JE.Value
+unitEncoder : () -> JE.Value
+unitEncoder =
+    encode unitCodec
+
+
+unitDecoder : JD.Decoder ()
+unitDecoder =
+    decoder unitCodec
+
+
+encode : IRCodec a b -> a -> JE.Value
 encode codec value =
     codec.toIRType value
         |> encodeAdapter
 
 
-decoder : IRCodec b b -> JD.Decoder b
+decoder : IRCodec a b -> JD.Decoder b
 decoder codec =
     decodeAdapter
         |> JD.andThen
