@@ -38,12 +38,6 @@ exampleMultitool adapter1 adapter2 adapter3 =
         |> endCustom
 
 
-hM =
-    record (\h -> { h = h })
-        |> field "h" .h int
-        |> endRecord
-
-
 gM =
     record (\g -> { g = g })
         |> field "g" .g int
