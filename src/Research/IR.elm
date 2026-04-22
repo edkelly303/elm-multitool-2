@@ -14,7 +14,7 @@ type Semaphore
     | Red Bool Bool
 
 
-semaphoreCodec : IRCodec Semaphore Semaphore
+semaphoreCodec : IRCodec () ()
 semaphoreCodec =
     custom
         (\red yellow green value ->
@@ -32,14 +32,16 @@ semaphoreCodec =
         |> variant0 Yellow
         |> variant2 Green bool string
         |> endCustom
+        |> contramap (\() -> Yellow)
+        |> map (always ())
 
 
-encodeSemaphore : Semaphore -> JE.Value
+encodeSemaphore : () -> JE.Value
 encodeSemaphore s =
     encode semaphoreCodec s
 
 
-semaphoreDecoder : JD.Decoder Semaphore
+semaphoreDecoder : JD.Decoder ()
 semaphoreDecoder =
     decoder semaphoreCodec
 
@@ -83,6 +85,12 @@ type IR
     | String String
       -- | Product (List IRType)
     | Custom Int Variant
+
+
+type Variant
+    = Variant0
+    | Variant1 IR
+    | Variant2 IR IR
 
 
 encodeAdapter irType =
@@ -153,12 +161,6 @@ decodeAdapter =
                     )
             )
         ]
-
-
-type Variant
-    = Variant0
-    | Variant1 IR
-    | Variant2 IR IR
 
 
 bool : IRCodec Bool Bool
@@ -252,5 +254,25 @@ variant2 ctor arg1fns arg2fns prev =
 
 endCustom prev =
     { toIRType = prev.match
+    , fromIRType = prev.fromIRType
+    }
+
+
+map :
+    (b -> c)
+    -> IRCodec a b
+    -> IRCodec a c
+map f prev =
+    { toIRType = prev.toIRType
+    , fromIRType = prev.fromIRType >> Result.map f
+    }
+
+
+contramap :
+    (b -> a)
+    -> IRCodec a c
+    -> IRCodec b c
+contramap f prev =
+    { toIRType = f >> prev.toIRType
     , fromIRType = prev.fromIRType
     }
