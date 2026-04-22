@@ -15,7 +15,7 @@ import Multitool exposing (..)
 
 type Example
     = Yellow
-    | Green { g : Int } (Maybe Int)
+    | Green { int : Int } (Maybe Int)
     | Red Bool String
 
 
@@ -29,18 +29,18 @@ exampleMultitool adapter1 adapter2 adapter3 =
                 Yellow ->
                     yellow
 
-                Green g h ->
-                    green g h
+                Green intRecord_ h ->
+                    green intRecord_ h
         )
         |> fixP adapter1 (variant2 "Red" Red bool string)
         |> variant0 "Yellow" Yellow
-        |> fixP adapter2 (variant2 "Green" Green gM (fix adapter3 (maybe int)))
+        |> fixP adapter2 (variant2 "Green" Green intRecord (fix adapter3 (maybe int)))
         |> endCustom
 
 
-gM =
-    record (\g -> { g = g })
-        |> field "g" .g int
+intRecord =
+    record (\int_ -> { int = int_ })
+        |> field "int" .int int
         |> endRecord
 
 
