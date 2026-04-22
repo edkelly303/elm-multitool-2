@@ -4,22 +4,19 @@ import Adapters
 import Exhaustive
 import Fuzz
 import Html
+import IR exposing (..)
 import Json.Decode as JD
 import Json.Encode as JE
-import Multitool exposing (..)
-
-
-
--- example
 
 
 type Example
     = Yellow
-    | Green { int : Int } (Maybe Int)
+    | Green String
     | Red Bool String
 
 
-exampleMultitool adapter1 adapter2 adapter3 =
+exampleMultitool : IRCodec Example Example
+exampleMultitool =
     custom
         (\red yellow green value ->
             case value of
@@ -29,83 +26,71 @@ exampleMultitool adapter1 adapter2 adapter3 =
                 Yellow ->
                     yellow
 
-                Green intRecord_ h ->
-                    green intRecord_ h
+                Green s ->
+                    green s
         )
-        |> fixP adapter1 (variant2 "Red" Red bool string)
-        |> variant0 "Yellow" Yellow
-        |> fixP adapter2 (variant2 "Green" Green intRecord (fix adapter3 (maybe int)))
+        |> variant2 Red bool string
+        |> variant0 Yellow
+        |> variant1 Green string
         |> endCustom
 
 
-intRecord =
-    record (\int_ -> { int = int_ })
-        |> field "int" .int int
-        |> endRecord
-
-
-
--- fuzzer : Fuzz.Fuzzer Example
-
-
+fuzzer : Fuzz.Fuzzer Example
 fuzzer =
-    exampleMultitool
-        Adapters.fuzzAdapter
-        Adapters.fuzzAdapter
-        Adapters.fuzzAdapter
-        Adapters.fuzzAdapter
+    Adapters.fuzzer exampleMultitool
 
 
 decoder : JD.Decoder Example
 decoder =
-    exampleMultitool
-        Adapters.decoderAdapter
-        Adapters.decoderAdapter
-        Adapters.decoderAdapter
-        Adapters.decoderAdapter
+    Adapters.decoder exampleMultitool
 
 
 encoder : Example -> JE.Value
 encoder =
-    exampleMultitool
-        Adapters.encoderAdapter
-        Adapters.encoderAdapter
-        Adapters.encoderAdapter
-        Adapters.encoderAdapter
+    Adapters.encode exampleMultitool
 
 
 exhaustive : Exhaustive.Generator Example
 exhaustive =
-    exampleMultitool
-        Adapters.exhaustiveAdapter
-        Adapters.exhaustiveAdapter
-        Adapters.exhaustiveAdapter
-        Adapters.exhaustiveAdapter
+    Adapters.exhaustive exampleMultitool
 
 
 
 -- main
 
 
+main : Html.Html msg
 main =
     let
         fuzzed =
-            Fuzz.examples 1 fuzzer
+            Fuzz.examples 3 fuzzer
 
         encoded =
             JE.encode 2 (JE.list encoder fuzzed)
+
+        decoded =
+            JD.decodeString (JD.list decoder) encoded
+
+        exhaustives =
+            exhaustive.every 5
     in
-    Html.div []
-        [ Html.h3 [] [ Html.text "Fuzzer" ]
+    Html.pre []
+        [ head "Fuzzer"
         , show fuzzed
-        , Html.h3 [] [ Html.text "Codec (to JSON)" ]
+        , head "JSON encoder"
         , Html.text encoded
-        , Html.h3 [] [ Html.text "Codec (from JSON)" ]
-        , show (JD.decodeString (JD.list decoder) encoded)
-        , Html.h3 [] [ Html.text "Exhaustive generator" ]
-        , show (exhaustive.nth 0)
+        , head "JSON decoder"
+        , show decoded
+        , head "Exhaustive generator"
+        , show exhaustives
         ]
 
 
+head : String -> Html.Html msg
+head txt =
+    Html.h3 [] [ Html.text txt ]
+
+
+show : a -> Html.Html msg
 show a =
     Html.text (Debug.toString a)

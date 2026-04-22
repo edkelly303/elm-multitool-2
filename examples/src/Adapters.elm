@@ -1,116 +1,203 @@
-module Adapters exposing (..)
+module Adapters exposing (decoder, encode, exhaustive, fuzzer)
 
-import Dict
 import Exhaustive
 import Fuzz
+import IR exposing (..)
 import Json.Decode as JD
 import Json.Encode as JE
 
 
-decoderAdapter =
-    { bool = JD.bool
-    , string = JD.string
-    , int = JD.int
-    , custom = \_ -> Dict.empty
-    , variant0 = \name ctor prev -> Dict.insert name (JD.succeed ctor) prev
-    , variant1 =
-        \name ctor dec1 prev ->
-            Dict.insert name
-                (JD.map ctor
-                    (JD.index 0 dec1)
-                )
-                prev
-    , variant2 =
-        \name ctor dec1 dec2 prev ->
-            Dict.insert name
-                (JD.map2 ctor
-                    (JD.index 0 dec1)
-                    (JD.index 1 dec2)
-                )
-                prev
-    , endCustom =
-        \prev ->
-            JD.field "tag" JD.string
-                |> JD.andThen
-                    (\tag ->
-                        case Dict.get tag prev of
-                            Nothing ->
-                                JD.fail <| "tag " ++ tag ++ " did not match"
+encode : IRCodec a b -> a -> JE.Value
+encode codec value =
+    IR.toIR codec value
+        |> encodeAdapter
 
-                            Just dec ->
-                                JD.field "args" dec
+
+decoder : IRCodec a b -> JD.Decoder b
+decoder codec =
+    decodeAdapter
+        |> JD.andThen
+            (\ir ->
+                case IR.fromIR codec ir of
+                    Ok s ->
+                        JD.succeed s
+
+                    Err Error ->
+                        JD.fail ""
+            )
+
+
+fuzzer : IRCodec a b -> Fuzz.Fuzzer b
+fuzzer codec =
+    IR.toIRType codec
+        |> fuzzAdapter
+        |> Fuzz.andThen
+            (\x ->
+                case IR.fromIR codec x of
+                    Ok y ->
+                        Fuzz.constant y
+
+                    Err _ ->
+                        Fuzz.invalid ""
+            )
+
+
+exhaustive : IRCodec a b -> Exhaustive.Generator b
+exhaustive codec =
+    IR.toIRType codec
+        |> exhaustiveAdapter
+        |> Exhaustive.andThen
+            (\x ->
+                case IR.fromIR codec x of
+                    Ok y ->
+                        Exhaustive.constant y
+
+                    Err _ ->
+                        Exhaustive.empty
+            )
+
+
+
+-- adapters
+
+
+exhaustiveAdapter : IRType -> Exhaustive.Generator IR
+exhaustiveAdapter irType =
+    case irType of
+        BoolT ->
+            Exhaustive.bool |> Exhaustive.map Bool
+
+        StringT ->
+            Exhaustive.string |> Exhaustive.map String
+
+        CustomT variants ->
+            Exhaustive.values
+                (List.indexedMap
+                    (\idx variant ->
+                        case variant of
+                            Variant0T ->
+                                Exhaustive.constant
+                                    (Custom idx Variant0)
+
+                            Variant1T arg ->
+                                Exhaustive.map
+                                    (\a -> Custom idx (Variant1 a))
+                                    (exhaustiveAdapter arg)
+
+                            Variant2T arg1 arg2 ->
+                                exhaustiveAdapter arg1
+                                    |> Exhaustive.andThen
+                                        (\a1 ->
+                                            Exhaustive.map
+                                                (\a2 -> Custom idx (Variant2 a1 a2))
+                                                (exhaustiveAdapter arg2)
+                                        )
                     )
-    , record = JD.succeed
-    , field = \name _ dec prev -> JD.map2 (|>) (JD.field name dec) prev
-    , endRecord = Basics.identity
-    , map = JD.map
-    }
-
-
-encoderAdapter =
-    { bool = JE.bool
-    , string = JE.string
-    , int = JE.int
-    , custom = \match -> match
-    , variant0 =
-        \name _ prev ->
-            prev
-                (JE.object
-                    [ ( "tag", JE.string name )
-                    , ( "args", JE.null )
-                    ]
+                    (List.reverse variants)
                 )
-    , variant1 =
-        \name _ enc1 prev ->
-            prev <|
-                \arg1 ->
-                    JE.object
-                        [ ( "tag", JE.string name )
-                        , ( "args", JE.list identity [ enc1 arg1 ] )
+                |> Exhaustive.andThen identity
+
+
+fuzzAdapter : IRType -> Fuzz.Fuzzer IR
+fuzzAdapter irType =
+    case irType of
+        BoolT ->
+            Fuzz.bool |> Fuzz.map Bool
+
+        StringT ->
+            Fuzz.string |> Fuzz.map String
+
+        CustomT variants ->
+            Fuzz.oneOf
+                (List.indexedMap
+                    (\idx variant ->
+                        case variant of
+                            Variant0T ->
+                                Fuzz.constant
+                                    (Custom idx Variant0)
+
+                            Variant1T arg ->
+                                Fuzz.map
+                                    (\a -> Custom idx (Variant1 a))
+                                    (fuzzAdapter arg)
+
+                            Variant2T arg1 arg2 ->
+                                Fuzz.map2
+                                    (\a1 a2 -> Custom idx (Variant2 a1 a2))
+                                    (fuzzAdapter arg1)
+                                    (fuzzAdapter arg2)
+                    )
+                    (List.reverse variants)
+                )
+
+
+encodeAdapter : IR -> JE.Value
+encodeAdapter irType =
+    case irType of
+        Bool b ->
+            JE.object
+                [ ( "bool", JE.bool b ) ]
+
+        String s ->
+            JE.object
+                [ ( "string", JE.string s ) ]
+
+        Custom selected variant ->
+            JE.object
+                [ ( "custom"
+                  , JE.object
+                        [ ( "tag", JE.int selected )
+                        , ( "args"
+                          , JE.list encodeAdapter
+                                (case variant of
+                                    Variant0 ->
+                                        []
+
+                                    Variant1 arg ->
+                                        [ arg ]
+
+                                    Variant2 arg1 arg2 ->
+                                        [ arg1
+                                        , arg2
+                                        ]
+                                )
+                          )
                         ]
-    , variant2 =
-        \name _ enc1 enc2 prev ->
-            prev <|
-                \arg1 arg2 ->
-                    JE.object
-                        [ ( "tag", JE.string name )
-                        , ( "args", JE.list identity [ enc1 arg1, enc2 arg2 ] )
-                        ]
-    , endCustom = \prev -> prev
-    , record = \_ -> []
-    , field = \name getter enc prev -> \rec -> ( name, enc (getter rec) ) :: prev
-    , endRecord = \prev -> \rec -> JE.object (List.reverse (prev rec))
-    , map = \_ x -> x
-    }
+                  )
+                ]
 
 
-fuzzAdapter =
-    { bool = Fuzz.bool
-    , string = Fuzz.string
-    , int = Fuzz.int
-    , custom = \_ -> []
-    , variant0 = \_ ctor prev -> Fuzz.constant ctor :: prev
-    , variant1 = \_ ctor fuzzer1 prev -> Fuzz.map ctor fuzzer1 :: prev
-    , variant2 = \_ ctor fuzzer1 fuzzer2 prev -> Fuzz.map2 ctor fuzzer1 fuzzer2 :: prev
-    , endCustom = \prev -> Fuzz.oneOf prev
-    , record = Fuzz.constant
-    , field = \_ _ f -> Fuzz.andMap f
-    , endRecord = Basics.identity
-    , map = Fuzz.map
-    }
+decodeAdapter : JD.Decoder IR
+decodeAdapter =
+    JD.oneOf
+        [ JD.field "bool" JD.bool |> JD.map Bool
+        , JD.field "string" JD.string |> JD.map String
+        , JD.field "custom"
+            (JD.map2
+                (\selected args ->
+                    case args of
+                        [] ->
+                            Just (Custom selected Variant0)
 
+                        [ arg ] ->
+                            Just (Custom selected (Variant1 arg))
 
-exhaustiveAdapter =
-    { string = Exhaustive.string
-    , bool = Exhaustive.bool
-    , int = Exhaustive.int
-    , custom = \_ -> Exhaustive.customType
-    , variant0 = \_ -> Exhaustive.variant0
-    , variant1 = \_ -> Exhaustive.variant1
-    , variant2 = \_ -> Exhaustive.variant2
-    , endCustom = Basics.identity
-    , record = Exhaustive.record
-    , field = \_ _ e -> Exhaustive.field e
-    , endRecord = Basics.identity
-    , map = Exhaustive.map
-    }
+                        [ arg1, arg2 ] ->
+                            Just (Custom selected (Variant2 arg1 arg2))
+
+                        _ ->
+                            Nothing
+                )
+                (JD.field "tag" JD.int)
+                (JD.field "args" (JD.list (JD.lazy (\_ -> decodeAdapter))))
+                |> JD.andThen
+                    (\mc ->
+                        case mc of
+                            Nothing ->
+                                JD.fail ""
+
+                            Just c ->
+                                JD.succeed c
+                    )
+            )
+        ]
