@@ -4,18 +4,29 @@ import Adapters
 import Exhaustive
 import Fuzz
 import Html
-import IR exposing (IRCodec)
+import IR exposing (Codec)
 import Json.Decode as JD
 import Json.Encode as JE
 
 
 type Example
     = Yellow
-    | Green String
+    | Green String RecordField
     | Red Bool String
 
 
-exampleMultitool : IRCodec Example Example
+type alias RecordField =
+    { field1 : Int, field2 : Char }
+
+
+fieldCodec : Codec RecordField RecordField
+fieldCodec =
+    IR.succeed RecordField
+        |> IR.andMap .field1 IR.int
+        |> IR.andMap .field2 IR.char
+
+
+exampleMultitool : Codec Example Example
 exampleMultitool =
     IR.custom
         (\red yellow green value ->
@@ -26,12 +37,12 @@ exampleMultitool =
                 Yellow ->
                     yellow
 
-                Green s ->
-                    green s
+                Green s r ->
+                    green s r
         )
         |> IR.variant2 Red IR.bool IR.string
         |> IR.variant0 Yellow
-        |> IR.variant1 Green IR.string
+        |> IR.variant2 Green IR.string fieldCodec
         |> IR.endCustom
 
 
@@ -63,7 +74,7 @@ main : Html.Html msg
 main =
     let
         fuzzed =
-            Fuzz.examples 3 fuzzer
+            Fuzz.examples 7 fuzzer
 
         encoded =
             JE.encode 2 (JE.list encoder fuzzed)
@@ -72,7 +83,7 @@ main =
             JD.decodeString (JD.list decoder) encoded
 
         exhaustives =
-            exhaustive.every 5
+            exhaustive.nth 70
     in
     Html.pre []
         [ head "Fuzzer"

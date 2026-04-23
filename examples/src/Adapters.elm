@@ -2,18 +2,18 @@ module Adapters exposing (decoder, encode, exhaustive, fuzzer)
 
 import Exhaustive
 import Fuzz
-import IR exposing (..)
+import IR exposing (IR(..), IRType)
 import Json.Decode as JD
 import Json.Encode as JE
 
 
-encode : IRCodec a b -> a -> JE.Value
+encode : IR.Codec a b -> a -> JE.Value
 encode codec value =
     IR.toIR codec value
         |> encodeAdapter
 
 
-decoder : IRCodec a b -> JD.Decoder b
+decoder : IR.Codec a b -> JD.Decoder b
 decoder codec =
     decodeAdapter
         |> JD.andThen
@@ -22,12 +22,12 @@ decoder codec =
                     Ok s ->
                         JD.succeed s
 
-                    Err Error ->
+                    Err IR.Error ->
                         JD.fail ""
             )
 
 
-fuzzer : IRCodec a b -> Fuzz.Fuzzer b
+fuzzer : IR.Codec a b -> Fuzz.Fuzzer b
 fuzzer codec =
     IR.toIRType codec
         |> fuzzAdapter
@@ -42,7 +42,7 @@ fuzzer codec =
             )
 
 
-exhaustive : IRCodec a b -> Exhaustive.Generator b
+exhaustive : IR.Codec a b -> Exhaustive.Generator b
 exhaustive codec =
     IR.toIRType codec
         |> exhaustiveAdapter
@@ -64,32 +64,41 @@ exhaustive codec =
 exhaustiveAdapter : IRType -> Exhaustive.Generator IR
 exhaustiveAdapter irType =
     case irType of
-        BoolT ->
-            Exhaustive.bool |> Exhaustive.map Bool
+        IR.BoolType ->
+            Exhaustive.bool |> Exhaustive.map IR.Bool
 
-        StringT ->
-            Exhaustive.string |> Exhaustive.map String
+        IR.CharType ->
+            Exhaustive.char |> Exhaustive.map IR.Char
 
-        CustomT variants ->
+        IR.StringType ->
+            Exhaustive.string |> Exhaustive.map IR.String
+
+        IR.IntType ->
+            Exhaustive.int |> Exhaustive.map IR.Int
+
+        IR.FloatType ->
+            Exhaustive.float |> Exhaustive.map IR.Float
+
+        IR.CustomType variants ->
             Exhaustive.values
                 (List.indexedMap
                     (\idx variant ->
                         case variant of
-                            Variant0T ->
+                            IR.Variant0Type ->
                                 Exhaustive.constant
-                                    (Custom idx Variant0)
+                                    (IR.Custom idx IR.Variant0)
 
-                            Variant1T arg ->
+                            IR.Variant1Type arg ->
                                 Exhaustive.map
-                                    (\a -> Custom idx (Variant1 a))
+                                    (\a -> IR.Custom idx (IR.Variant1 a))
                                     (exhaustiveAdapter arg)
 
-                            Variant2T arg1 arg2 ->
+                            IR.Variant2Type arg1 arg2 ->
                                 exhaustiveAdapter arg1
                                     |> Exhaustive.andThen
                                         (\a1 ->
                                             Exhaustive.map
-                                                (\a2 -> Custom idx (Variant2 a1 a2))
+                                                (\a2 -> IR.Custom idx (IR.Variant2 a1 a2))
                                                 (exhaustiveAdapter arg2)
                                         )
                     )
@@ -97,52 +106,101 @@ exhaustiveAdapter irType =
                 )
                 |> Exhaustive.andThen identity
 
+        IR.ProductType fields ->
+            -- this isn't a good exhaustive generator, it should rotate through
+            -- the values of the fields... but it'll do for now.
+            Exhaustive.new
+                (\nth ->
+                    List.foldl
+                        (\field acc ->
+                            acc
+                                |> Maybe.andThen
+                                    (\list ->
+                                        let
+                                            gen =
+                                                exhaustiveAdapter field
+                                        in
+                                        gen.nth nth
+                                            |> Maybe.map (\value -> value :: list)
+                                    )
+                        )
+                        (Just [])
+                        (List.reverse fields)
+                )
+                |> Exhaustive.map IR.Product
+
 
 fuzzAdapter : IRType -> Fuzz.Fuzzer IR
 fuzzAdapter irType =
     case irType of
-        BoolT ->
-            Fuzz.bool |> Fuzz.map Bool
+        IR.BoolType ->
+            Fuzz.bool |> Fuzz.map IR.Bool
 
-        StringT ->
-            Fuzz.string |> Fuzz.map String
+        IR.CharType ->
+            Fuzz.char |> Fuzz.map IR.Char
 
-        CustomT variants ->
+        IR.StringType ->
+            Fuzz.string |> Fuzz.map IR.String
+
+        IR.IntType ->
+            Fuzz.int |> Fuzz.map IR.Int
+
+        IR.FloatType ->
+            Fuzz.float |> Fuzz.map IR.Float
+
+        IR.CustomType variants ->
             Fuzz.oneOf
                 (List.indexedMap
                     (\idx variant ->
                         case variant of
-                            Variant0T ->
+                            IR.Variant0Type ->
                                 Fuzz.constant
-                                    (Custom idx Variant0)
+                                    (IR.Custom idx IR.Variant0)
 
-                            Variant1T arg ->
+                            IR.Variant1Type arg ->
                                 Fuzz.map
-                                    (\a -> Custom idx (Variant1 a))
+                                    (\a -> IR.Custom idx (IR.Variant1 a))
                                     (fuzzAdapter arg)
 
-                            Variant2T arg1 arg2 ->
+                            IR.Variant2Type arg1 arg2 ->
                                 Fuzz.map2
-                                    (\a1 a2 -> Custom idx (Variant2 a1 a2))
+                                    (\a1 a2 -> IR.Custom idx (IR.Variant2 a1 a2))
                                     (fuzzAdapter arg1)
                                     (fuzzAdapter arg2)
                     )
                     (List.reverse variants)
                 )
 
+        IR.ProductType fields ->
+            fields
+                |> Fuzz.traverse fuzzAdapter
+                |> Fuzz.map IR.Product
+
 
 encodeAdapter : IR -> JE.Value
 encodeAdapter irType =
     case irType of
-        Bool b ->
+        IR.Bool b ->
             JE.object
                 [ ( "bool", JE.bool b ) ]
 
-        String s ->
+        IR.Char c ->
+            JE.object
+                [ ( "char", JE.string (String.fromChar c) ) ]
+
+        IR.String s ->
             JE.object
                 [ ( "string", JE.string s ) ]
 
-        Custom selected variant ->
+        IR.Int i ->
+            JE.object
+                [ ( "int", JE.int i ) ]
+
+        IR.Float f ->
+            JE.object
+                [ ( "float", JE.float f ) ]
+
+        IR.Custom selected variant ->
             JE.object
                 [ ( "custom"
                   , JE.object
@@ -150,13 +208,13 @@ encodeAdapter irType =
                         , ( "args"
                           , JE.list encodeAdapter
                                 (case variant of
-                                    Variant0 ->
+                                    IR.Variant0 ->
                                         []
 
-                                    Variant1 arg ->
+                                    IR.Variant1 arg ->
                                         [ arg ]
 
-                                    Variant2 arg1 arg2 ->
+                                    IR.Variant2 arg1 arg2 ->
                                         [ arg1
                                         , arg2
                                         ]
@@ -166,24 +224,43 @@ encodeAdapter irType =
                   )
                 ]
 
+        IR.Product fields ->
+            JE.object
+                [ ( "product"
+                  , JE.list encodeAdapter fields
+                  )
+                ]
+
 
 decodeAdapter : JD.Decoder IR
 decodeAdapter =
     JD.oneOf
-        [ JD.field "bool" JD.bool |> JD.map Bool
-        , JD.field "string" JD.string |> JD.map String
+        [ JD.field "bool" JD.bool |> JD.map IR.Bool
+        , JD.field "char" JD.string
+            |> JD.andThen
+                (\s ->
+                    case String.uncons s of
+                        Nothing ->
+                            JD.fail "not a char"
+
+                        Just ( c, _ ) ->
+                            JD.succeed (IR.Char c)
+                )
+        , JD.field "string" JD.string |> JD.map IR.String
+        , JD.field "int" JD.int |> JD.map IR.Int
+        , JD.field "float" JD.float |> JD.map IR.Float
         , JD.field "custom"
             (JD.map2
                 (\selected args ->
                     case args of
                         [] ->
-                            Just (Custom selected Variant0)
+                            Just (IR.Custom selected IR.Variant0)
 
                         [ arg ] ->
-                            Just (Custom selected (Variant1 arg))
+                            Just (IR.Custom selected (IR.Variant1 arg))
 
                         [ arg1, arg2 ] ->
-                            Just (Custom selected (Variant2 arg1 arg2))
+                            Just (IR.Custom selected (IR.Variant2 arg1 arg2))
 
                         _ ->
                             Nothing
@@ -199,5 +276,9 @@ decodeAdapter =
                             Just c ->
                                 JD.succeed c
                     )
+            )
+        , JD.field "product"
+            (JD.list (JD.lazy (\_ -> decodeAdapter))
+                |> JD.map IR.Product
             )
         ]

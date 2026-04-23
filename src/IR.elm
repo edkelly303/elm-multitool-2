@@ -1,21 +1,50 @@
-module IR exposing (..)
+module IR exposing
+    ( Codec
+    , CustomCodec
+    , Error(..)
+    , IR(..)
+    , IRType(..)
+    , Variant(..)
+    , VariantType(..)
+    , andMap
+    , andThen
+    , bool
+    , char
+    , contramap
+    , custom
+    , endCustom
+    , float
+    , fromIR
+    , int
+    , map
+    , string
+    , succeed
+    , toIR
+    , toIRType
+    , variant0
+    , variant1
+    , variant2
+    )
 
 
 type Error
     = Error
 
 
-type IRCodec a b
+type Codec input output
     = IRCodec
-        { toIR : a -> IR
-        , fromIR : IR -> Result Error b
+        { toIR : input -> IR
+        , fromIR : IR -> Result Error output
         , toIRType : IRType
         }
 
 
 type IR
     = Bool Bool
+    | Char Char
     | String String
+    | Int Int
+    | Float Float
     | Custom Int Variant
     | Product (List IR)
 
@@ -27,34 +56,37 @@ type Variant
 
 
 type IRType
-    = BoolT
-    | StringT
-    | CustomT (List VariantT)
-    | ProductT (List IRType)
+    = BoolType
+    | CharType
+    | StringType
+    | IntType
+    | FloatType
+    | CustomType (List VariantType)
+    | ProductType (List IRType)
 
 
-type VariantT
-    = Variant0T
-    | Variant1T IRType
-    | Variant2T IRType IRType
+type VariantType
+    = Variant0Type
+    | Variant1Type IRType
+    | Variant2Type IRType IRType
 
 
-toIR : IRCodec a b -> a -> IR
+toIR : Codec input output -> input -> IR
 toIR (IRCodec c) =
     c.toIR
 
 
-toIRType : IRCodec a b -> IRType
+toIRType : Codec input output -> IRType
 toIRType (IRCodec c) =
     c.toIRType
 
 
-fromIR : IRCodec a b -> IR -> Result Error b
+fromIR : Codec input output -> IR -> Result Error output
 fromIR (IRCodec c) =
     c.fromIR
 
 
-bool : IRCodec Bool Bool
+bool : Codec Bool Bool
 bool =
     IRCodec
         { toIR = Bool
@@ -66,11 +98,27 @@ bool =
 
                     _ ->
                         Err Error
-        , toIRType = BoolT
+        , toIRType = BoolType
         }
 
 
-string : IRCodec String String
+char : Codec Char Char
+char =
+    IRCodec
+        { toIR = Char
+        , fromIR =
+            \ir ->
+                case ir of
+                    Char c ->
+                        Ok c
+
+                    _ ->
+                        Err Error
+        , toIRType = CharType
+        }
+
+
+string : Codec String String
 string =
     IRCodec
         { toIR = String
@@ -82,10 +130,51 @@ string =
 
                     _ ->
                         Err Error
-        , toIRType = StringT
+        , toIRType = StringType
         }
 
 
+int : Codec Int Int
+int =
+    IRCodec
+        { toIR = Int
+        , fromIR =
+            \ir ->
+                case ir of
+                    Int i ->
+                        Ok i
+
+                    _ ->
+                        Err Error
+        , toIRType = IntType
+        }
+
+
+float : Codec Float Float
+float =
+    IRCodec
+        { toIR = Float
+        , fromIR =
+            \ir ->
+                case ir of
+                    Float s ->
+                        Ok s
+
+                    _ ->
+                        Err Error
+        , toIRType = FloatType
+        }
+
+
+type alias CustomCodec input output =
+    { match : input
+    , fromIR : IR -> Result Error output
+    , toIRType : List VariantType
+    , index : Int
+    }
+
+
+custom : input -> CustomCodec input output
 custom match =
     { match = match
     , index = 0
@@ -94,6 +183,10 @@ custom match =
     }
 
 
+variant0 :
+    output
+    -> CustomCodec (IR -> input) output
+    -> CustomCodec input output
 variant0 ctor prev =
     { match = prev.match <| Custom prev.index Variant0
     , index = prev.index + 1
@@ -109,10 +202,15 @@ variant0 ctor prev =
 
                 _ ->
                     prev.fromIR ir
-    , toIRType = Variant0T :: prev.toIRType
+    , toIRType = Variant0Type :: prev.toIRType
     }
 
 
+variant1 :
+    (arg1 -> output)
+    -> Codec arg1 arg1
+    -> CustomCodec ((arg1 -> IR) -> input) output
+    -> CustomCodec input output
 variant1 ctor (IRCodec argfns) prev =
     { match = prev.match <| \arg -> Custom prev.index (Variant1 (argfns.toIR arg))
     , index = prev.index + 1
@@ -128,10 +226,16 @@ variant1 ctor (IRCodec argfns) prev =
 
                 _ ->
                     prev.fromIR ir
-    , toIRType = Variant1T argfns.toIRType :: prev.toIRType
+    , toIRType = Variant1Type argfns.toIRType :: prev.toIRType
     }
 
 
+variant2 :
+    (arg1 -> arg2 -> output)
+    -> Codec arg1 arg1
+    -> Codec arg2 arg2
+    -> CustomCodec ((arg1 -> arg2 -> IR) -> input) output
+    -> CustomCodec input output
 variant2 ctor (IRCodec arg1fns) (IRCodec arg2fns) prev =
     { match = prev.match <| \arg1 arg2 -> Custom prev.index (Variant2 (arg1fns.toIR arg1) (arg2fns.toIR arg2))
     , index = prev.index + 1
@@ -147,25 +251,20 @@ variant2 ctor (IRCodec arg1fns) (IRCodec arg2fns) prev =
 
                 _ ->
                     prev.fromIR ir
-    , toIRType = Variant2T arg1fns.toIRType arg2fns.toIRType :: prev.toIRType
+    , toIRType = Variant2Type arg1fns.toIRType arg2fns.toIRType :: prev.toIRType
     }
 
 
-endCustom :
-    { match : a -> IR
-    , fromIR : IR -> Result Error b
-    , toIRType : List VariantT
-    , index : Int
-    }
-    -> IRCodec a b
+endCustom : CustomCodec (input -> IR) output -> Codec input output
 endCustom prev =
     IRCodec
         { toIR = prev.match
         , fromIR = prev.fromIR
-        , toIRType = CustomT prev.toIRType
+        , toIRType = CustomType prev.toIRType
         }
 
 
+succeed : output -> Codec input output
 succeed ctor =
     IRCodec
         { toIR = \_ -> Product []
@@ -177,15 +276,15 @@ succeed ctor =
 
                     _ ->
                         Err Error
-        , toIRType = ProductT []
+        , toIRType = ProductType []
         }
 
 
 andMap :
-    (a -> b)
-    -> IRCodec b c
-    -> IRCodec a (c -> d)
-    -> IRCodec a d
+    (input -> field)
+    -> Codec field field
+    -> Codec input (field -> output)
+    -> Codec input output
 andMap getter (IRCodec this) (IRCodec prev) =
     IRCodec
         { toIR =
@@ -208,18 +307,18 @@ andMap getter (IRCodec this) (IRCodec prev) =
                         Err Error
         , toIRType =
             case prev.toIRType of
-                ProductT prevFieldTypes ->
-                    ProductT (this.toIRType :: prevFieldTypes)
+                ProductType prevFieldTypes ->
+                    ProductType (this.toIRType :: prevFieldTypes)
 
                 _ ->
-                    ProductT [ this.toIRType ]
+                    ProductType [ this.toIRType ]
         }
 
 
 map :
-    (b -> c)
-    -> IRCodec a b
-    -> IRCodec a c
+    (output1 -> output2)
+    -> Codec input output1
+    -> Codec input output2
 map f (IRCodec prev) =
     IRCodec
         { toIR = prev.toIR
@@ -229,9 +328,9 @@ map f (IRCodec prev) =
 
 
 contramap :
-    (b -> a)
-    -> IRCodec a c
-    -> IRCodec b c
+    (input2 -> input1)
+    -> Codec input1 output
+    -> Codec input2 output
 contramap f (IRCodec prev) =
     IRCodec
         { toIR = f >> prev.toIR
@@ -241,9 +340,9 @@ contramap f (IRCodec prev) =
 
 
 andThen :
-    (b -> Result Error c)
-    -> IRCodec a b
-    -> IRCodec a c
+    (output1 -> Result Error output2)
+    -> Codec input output1
+    -> Codec input output2
 andThen f (IRCodec prev) =
     IRCodec
         { toIR = prev.toIR
