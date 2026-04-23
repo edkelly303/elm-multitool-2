@@ -3,7 +3,7 @@ module Adapters exposing (..)
 -- import Exhaustive
 
 import Fuzz
-import IR exposing (IR(..), IRType)
+import IR exposing (IR, IRType)
 import Json.Decode as JD
 import Json.Encode as JE
 import Maybe.Extra
@@ -66,11 +66,11 @@ diff codec old new =
                     else
                         Just (IR.Bool b2)
 
-                ( Product fields1, Product fields2 ) ->
+                ( IR.Product fields1, IR.Product fields2 ) ->
                     if List.length fields1 == List.length fields2 then
                         List.map2 help fields1 fields2
                             |> Maybe.Extra.combine
-                            |> Maybe.map Product
+                            |> Maybe.map IR.Product
 
                     else
                         Nothing
@@ -79,6 +79,44 @@ diff codec old new =
                     Nothing
     in
     help oldIR newIR
+
+
+patch : IR.Codec a a -> Diff -> a -> Result IR.Error a
+patch codec delta old =
+    let
+        help changes_ old_ =
+            case ( changes_, old_ ) of
+                ( IR.Product [], any ) ->
+                    Just any
+
+                ( IR.Bool b, IR.Bool _ ) ->
+                    Just (IR.Bool b)
+
+                ( IR.Product fieldChanges, IR.Product oldFields ) ->
+                    if List.length fieldChanges == List.length oldFields then
+                        List.map2 help fieldChanges oldFields
+                            |> Maybe.Extra.combine
+                            |> Maybe.map IR.Product
+
+                    else
+                        Nothing
+
+                _ ->
+                    Nothing
+
+        maybeNewIR =
+            Maybe.andThen
+                (\changes ->
+                    help changes (IR.toIR codec old)
+                )
+                delta
+    in
+    case maybeNewIR of
+        Just ir ->
+            IR.fromIR codec ir
+
+        Nothing ->
+            Err IR.Error
 
 
 
