@@ -1,6 +1,8 @@
 module Main exposing (..)
 
-import Adapters
+import Adapters.Diff
+import Adapters.Fuzz
+import Adapters.Json
 import Fuzz
 import Html
 import IR exposing (Codec)
@@ -49,17 +51,17 @@ exampleMultitool =
 
 fuzzer : Fuzz.Fuzzer Example
 fuzzer =
-    Adapters.fuzzer exampleMultitool
+    Adapters.Fuzz.fuzzer exampleMultitool
 
 
 decoder : JD.Decoder Example
 decoder =
-    Adapters.decoder exampleMultitool
+    Adapters.Json.decoder exampleMultitool
 
 
-encoder : Example -> JE.Value
-encoder =
-    Adapters.encode exampleMultitool
+encode : Example -> JE.Value
+encode =
+    Adapters.Json.encode exampleMultitool
 
 
 
@@ -78,7 +80,7 @@ main =
             Fuzz.examples 2 fuzzer
 
         encoded =
-            JE.encode 2 (JE.list encoder fuzzed)
+            JE.encode 2 (JE.list encode fuzzed)
 
         decoded =
             JD.decodeString (JD.list decoder) encoded
@@ -91,7 +93,7 @@ main =
         , head "JSON decoder"
         , show decoded
         , head "Differ"
-        , show (Adapters.diff recordCodec { field1 = False, field2 = False } { field1 = True, field2 = False })
+        , show (Adapters.Diff.diff recordCodec { field1 = False, field2 = False } { field1 = True, field2 = False })
 
         -- there's something really slow about the exhaustive generator adapter,
         -- let's switch it off for now...
