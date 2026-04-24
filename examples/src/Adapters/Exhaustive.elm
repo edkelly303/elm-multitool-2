@@ -91,3 +91,7 @@ exhaustiveAdapter irType =
                         (List.reverse fields)
                 )
                 |> Exhaustive.map IR.Product
+
+        IR.ListType itemType ->
+            Exhaustive.list 5 (exhaustiveAdapter itemType)
+                |> Exhaustive.map IR.List

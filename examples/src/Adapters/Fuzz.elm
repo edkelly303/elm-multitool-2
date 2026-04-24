@@ -64,3 +64,7 @@ fuzzAdapter irType =
             fields
                 |> Fuzz.traverse fuzzAdapter
                 |> Fuzz.map IR.Product
+
+        IR.ListType itemType ->
+            Fuzz.list (fuzzAdapter itemType)
+                |> Fuzz.map IR.List

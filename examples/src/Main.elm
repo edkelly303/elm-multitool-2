@@ -13,7 +13,7 @@ import Json.Encode as JE
 type Example
     = Yellow
     | Green String Record
-    | Red Bool String
+    | Red Char (List Int)
 
 
 type alias Record =
@@ -43,7 +43,7 @@ exampleMultitool =
                 Green s r ->
                     green s r
         )
-        |> IR.variant2 Red IR.bool IR.string
+        |> IR.variant2 Red IR.char (IR.list IR.int)
         |> IR.variant0 Yellow
         |> IR.variant2 Green IR.string recordCodec
         |> IR.endCustom

@@ -27,7 +27,6 @@ decoder codec =
             )
 
 
-
 encodeAdapter : IR -> JE.Value
 encodeAdapter irType =
     case irType of
@@ -82,6 +81,13 @@ encodeAdapter irType =
                   )
                 ]
 
+        IR.List items ->
+            JE.object
+                [ ( "list"
+                  , JE.list encodeAdapter items
+                  )
+                ]
+
 
 decodeAdapter : JD.Decoder IR
 decodeAdapter =
@@ -131,5 +137,9 @@ decodeAdapter =
         , JD.field "product"
             (JD.list (JD.lazy (\() -> decodeAdapter))
                 |> JD.map IR.Product
+            )
+        , JD.field "list"
+            (JD.list (JD.lazy (\() -> decodeAdapter))
+                |> JD.map IR.List
             )
         ]

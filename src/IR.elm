@@ -16,6 +16,7 @@ module IR exposing
     , float
     , fromIR
     , int
+    , list
     , map
     , string
     , succeed
@@ -25,6 +26,8 @@ module IR exposing
     , variant1
     , variant2
     )
+
+import Result.Extra
 
 
 type Error
@@ -47,6 +50,7 @@ type IR
     | Float Float
     | Custom Int Variant
     | Product (List IR)
+    | List (List IR)
 
 
 type Variant
@@ -63,6 +67,7 @@ type IRType
     | FloatType
     | CustomType (List VariantType)
     | ProductType (List IRType)
+    | ListType IRType
 
 
 type VariantType
@@ -163,6 +168,23 @@ float =
                     _ ->
                         Err Error
         , toIRType = FloatType
+        }
+
+
+list : Codec a a -> Codec (List a) (List a)
+list (Codec item) =
+    Codec
+        { toIR = \items -> List (List.map item.toIR items)
+        , fromIR =
+            \ir ->
+                case ir of
+                    List items ->
+                        List.map item.fromIR items
+                            |> Result.Extra.combine
+
+                    _ ->
+                        Err Error
+        , toIRType = ListType item.toIRType
         }
 
 
