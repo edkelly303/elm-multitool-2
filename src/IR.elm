@@ -32,7 +32,7 @@ type Error
 
 
 type Codec input output
-    = IRCodec
+    = Codec
         { toIR : input -> IR
         , fromIR : IR -> Result Error output
         , toIRType : IRType
@@ -72,23 +72,23 @@ type VariantType
 
 
 toIR : Codec input output -> input -> IR
-toIR (IRCodec c) =
+toIR (Codec c) =
     c.toIR
 
 
 toIRType : Codec input output -> IRType
-toIRType (IRCodec c) =
+toIRType (Codec c) =
     c.toIRType
 
 
 fromIR : Codec input output -> IR -> Result Error output
-fromIR (IRCodec c) =
+fromIR (Codec c) =
     c.fromIR
 
 
 bool : Codec Bool Bool
 bool =
-    IRCodec
+    Codec
         { toIR = Bool
         , fromIR =
             \ir ->
@@ -104,7 +104,7 @@ bool =
 
 char : Codec Char Char
 char =
-    IRCodec
+    Codec
         { toIR = Char
         , fromIR =
             \ir ->
@@ -120,7 +120,7 @@ char =
 
 string : Codec String String
 string =
-    IRCodec
+    Codec
         { toIR = String
         , fromIR =
             \ir ->
@@ -136,7 +136,7 @@ string =
 
 int : Codec Int Int
 int =
-    IRCodec
+    Codec
         { toIR = Int
         , fromIR =
             \ir ->
@@ -152,7 +152,7 @@ int =
 
 float : Codec Float Float
 float =
-    IRCodec
+    Codec
         { toIR = Float
         , fromIR =
             \ir ->
@@ -211,7 +211,7 @@ variant1 :
     -> Codec arg1 arg1
     -> CustomCodec ((arg1 -> IR) -> input) output
     -> CustomCodec input output
-variant1 ctor (IRCodec argfns) prev =
+variant1 ctor (Codec argfns) prev =
     { match = prev.match <| \arg -> Custom prev.index (Variant1 (argfns.toIR arg))
     , index = prev.index + 1
     , fromIR =
@@ -236,7 +236,7 @@ variant2 :
     -> Codec arg2 arg2
     -> CustomCodec ((arg1 -> arg2 -> IR) -> input) output
     -> CustomCodec input output
-variant2 ctor (IRCodec arg1fns) (IRCodec arg2fns) prev =
+variant2 ctor (Codec arg1fns) (Codec arg2fns) prev =
     { match = prev.match <| \arg1 arg2 -> Custom prev.index (Variant2 (arg1fns.toIR arg1) (arg2fns.toIR arg2))
     , index = prev.index + 1
     , fromIR =
@@ -257,7 +257,7 @@ variant2 ctor (IRCodec arg1fns) (IRCodec arg2fns) prev =
 
 endCustom : CustomCodec (input -> IR) output -> Codec input output
 endCustom prev =
-    IRCodec
+    Codec
         { toIR = prev.match
         , fromIR = prev.fromIR
         , toIRType = CustomType prev.toIRType
@@ -266,7 +266,7 @@ endCustom prev =
 
 succeed : output -> Codec input output
 succeed ctor =
-    IRCodec
+    Codec
         { toIR = \_ -> Product []
         , fromIR =
             \ir ->
@@ -285,8 +285,8 @@ andMap :
     -> Codec field field
     -> Codec input (field -> output)
     -> Codec input output
-andMap getter (IRCodec this) (IRCodec prev) =
-    IRCodec
+andMap getter (Codec this) (Codec prev) =
+    Codec
         { toIR =
             \a ->
                 case prev.toIR a of
@@ -319,8 +319,8 @@ map :
     (output1 -> output2)
     -> Codec input output1
     -> Codec input output2
-map f (IRCodec prev) =
-    IRCodec
+map f (Codec prev) =
+    Codec
         { toIR = prev.toIR
         , fromIR = prev.fromIR >> Result.map f
         , toIRType = prev.toIRType
@@ -331,8 +331,8 @@ contramap :
     (input2 -> input1)
     -> Codec input1 output
     -> Codec input2 output
-contramap f (IRCodec prev) =
-    IRCodec
+contramap f (Codec prev) =
+    Codec
         { toIR = f >> prev.toIR
         , fromIR = prev.fromIR
         , toIRType = prev.toIRType
@@ -343,8 +343,8 @@ andThen :
     (output1 -> Result Error output2)
     -> Codec input output1
     -> Codec input output2
-andThen f (IRCodec prev) =
-    IRCodec
+andThen f (Codec prev) =
+    Codec
         { toIR = prev.toIR
         , fromIR = prev.fromIR >> Result.andThen f
         , toIRType = prev.toIRType
