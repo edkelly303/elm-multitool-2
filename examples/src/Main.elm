@@ -97,13 +97,13 @@ main =
             Fuzz.examples 2 exampleFuzzer
 
         encoded =
-            JE.encode 2 (JE.list encodeExample fuzzed)
+            JE.encode 2 (encodeExample old)
 
         decoded =
-            JD.decodeString (JD.list exampleDecoder) encoded
+            JD.decodeString exampleDecoder encoded
 
         ( old, seed ) =
-            Random.step exampleGenerator (Random.initialSeed 1000)
+            Random.step exampleGenerator (Random.initialSeed 0)
 
         ( new, _ ) =
             Random.step exampleGenerator seed
@@ -115,19 +115,20 @@ main =
             patchExample diff old
     in
     Html.pre []
-        [ head "Fuzzer"
-        , show fuzzed
-        , head "Generator"
+        [ head "Generator ('old' value)"
         , show old
+        , head "Generator ('new' value)"
         , show new
-        , head "Diff"
+        , head "Diff between 'old' & 'new'"
         , show diff
-        , head "Patch"
+        , head "Patch 'old' with diff"
         , show patched
         , head "JSON encoder"
         , Html.text encoded
         , head "JSON decoder"
         , show decoded
+        , head "Fuzzer"
+        , show fuzzed
 
         -- there's something really slow about the exhaustive generator adapter,
         -- let's switch it off for now...
