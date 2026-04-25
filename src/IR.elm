@@ -188,74 +188,76 @@ list (Codec item) =
         }
 
 
-type alias CustomCodec input variantType output =
-    { match : input
-    , fromIR : IR -> Result Error output
-    , toIRType : ( variantType, List VariantType )
-    , index : Int
-    }
+type CustomCodec input variantType output
+    = CustomCodec
+        { match : input
+        , fromIR : IR -> Result Error output
+        , variantTypes : List VariantType
+        , index : Int
+        }
 
 
-custom : input -> CustomCodec input () output
+custom : input -> CustomCodec input Never output
 custom match =
-    { match = match
-    , index = 0
-    , fromIR = \_ -> Err Error
-    , toIRType = ( (), [] )
-    }
+    CustomCodec
+        { match = match
+        , index = 0
+        , fromIR = \_ -> Err Error
+        , variantTypes = []
+        }
 
 
 variant0 :
     output
     -> CustomCodec (IR -> input) variantType output
-    -> CustomCodec input VariantType output
-variant0 ctor prev =
-    { match = prev.match <| Custom prev.index Variant0
-    , index = prev.index + 1
-    , fromIR =
-        \ir ->
-            case ir of
-                Custom selected Variant0 ->
-                    if selected == prev.index then
-                        Ok ctor
+    -> CustomCodec input () output
+variant0 ctor (CustomCodec prev) =
+    CustomCodec
+        { match = prev.match <| Custom prev.index Variant0
+        , index = prev.index + 1
+        , fromIR =
+            \ir ->
+                case ir of
+                    Custom selected Variant0 ->
+                        if selected == prev.index then
+                            Ok ctor
 
-                    else
+                        else
+                            prev.fromIR ir
+
+                    _ ->
                         prev.fromIR ir
-
-                _ ->
-                    prev.fromIR ir
-    , toIRType =
-        ( Variant0Type
-        , Variant0Type :: Tuple.second prev.toIRType
-        )
-    }
+        , variantTypes = Variant0Type :: prev.variantTypes
+        }
 
 
 variant1 :
     (arg1 -> output)
     -> Codec arg1 arg1
     -> CustomCodec ((arg1 -> IR) -> input) variantType output
-    -> CustomCodec input VariantType output
-variant1 ctor (Codec argfns) prev =
-    { match = prev.match <| \arg -> Custom prev.index (Variant1 (argfns.toIR arg))
-    , index = prev.index + 1
-    , fromIR =
-        \ir ->
-            case ir of
-                Custom selected (Variant1 arg) ->
-                    if selected == prev.index then
-                        Result.map ctor (argfns.fromIR arg)
+    -> CustomCodec input () output
+variant1 ctor (Codec argfns) (CustomCodec prev) =
+    let
+        thisVariant =
+            Variant1Type argfns.toIRType
+    in
+    CustomCodec
+        { match = prev.match <| \arg -> Custom prev.index (Variant1 (argfns.toIR arg))
+        , index = prev.index + 1
+        , fromIR =
+            \ir ->
+                case ir of
+                    Custom selected (Variant1 arg) ->
+                        if selected == prev.index then
+                            Result.map ctor (argfns.fromIR arg)
 
-                    else
+                        else
+                            prev.fromIR ir
+
+                    _ ->
                         prev.fromIR ir
-
-                _ ->
-                    prev.fromIR ir
-    , toIRType =
-        ( Variant1Type argfns.toIRType
-        , Variant1Type argfns.toIRType :: Tuple.second prev.toIRType
-        )
-    }
+        , variantTypes = thisVariant :: prev.variantTypes
+        }
 
 
 variant2 :
@@ -263,45 +265,48 @@ variant2 :
     -> Codec arg1 arg1
     -> Codec arg2 arg2
     -> CustomCodec ((arg1 -> arg2 -> IR) -> input) variantType output
-    -> CustomCodec input VariantType output
-variant2 ctor (Codec arg1fns) (Codec arg2fns) prev =
-    { match = prev.match <| \arg1 arg2 -> Custom prev.index (Variant2 (arg1fns.toIR arg1) (arg2fns.toIR arg2))
-    , index = prev.index + 1
-    , fromIR =
-        \ir ->
-            case ir of
-                Custom selected (Variant2 arg1 arg2) ->
-                    if selected == prev.index then
-                        Result.map2 ctor (arg1fns.fromIR arg1) (arg2fns.fromIR arg2)
+    -> CustomCodec input () output
+variant2 ctor (Codec arg1fns) (Codec arg2fns) (CustomCodec prev) =
+    let
+        thisVariant =
+            Variant2Type arg1fns.toIRType arg2fns.toIRType
+    in
+    CustomCodec
+        { match = prev.match <| \arg1 arg2 -> Custom prev.index (Variant2 (arg1fns.toIR arg1) (arg2fns.toIR arg2))
+        , index = prev.index + 1
+        , fromIR =
+            \ir ->
+                case ir of
+                    Custom selected (Variant2 arg1 arg2) ->
+                        if selected == prev.index then
+                            Result.map2 ctor (arg1fns.fromIR arg1) (arg2fns.fromIR arg2)
 
-                    else
+                        else
+                            prev.fromIR ir
+
+                    _ ->
                         prev.fromIR ir
-
-                _ ->
-                    prev.fromIR ir
-    , toIRType =
-        ( Variant2Type arg1fns.toIRType arg2fns.toIRType
-        , Variant2Type arg1fns.toIRType arg2fns.toIRType :: Tuple.second prev.toIRType
-        )
-    }
+        , variantTypes = thisVariant :: prev.variantTypes
+        }
 
 
-endCustom : CustomCodec (input -> IR) VariantType output -> Codec input output
-endCustom prev =
+endCustom : CustomCodec (input -> IR) () output -> Codec input output
+endCustom (CustomCodec prev) =
     Codec
         { toIR = prev.match
         , fromIR = prev.fromIR
         , toIRType =
-            let
-                ( default, variants ) =
-                    prev.toIRType
-            in
-            case variants of
+            case prev.variantTypes of
                 [] ->
-                    CustomType default []
+                    -- we know this can't happen, because if the second type
+                    -- variable of CustomCodec is `()`, then we know that we've
+                    -- used at least one `variantX` function, so the list of
+                    -- variants can't be empty. So it's ok to use a spurious
+                    -- Variant0Type here, because this will never get produced.
+                    CustomType Variant0Type []
 
-                first :: rest ->
-                    CustomType first rest
+                firstVariantType :: restVariantTypes ->
+                    CustomType firstVariantType restVariantTypes
         }
 
 
