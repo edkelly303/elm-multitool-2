@@ -9,13 +9,13 @@ import IR exposing (IR, IRType)
 -- switch it off for now...
 
 
-exhaustive : IR.Codec a b -> Exhaustive.Generator b
+exhaustive : IR.Codec input output -> Exhaustive.Generator output
 exhaustive codec =
-    IR.toIRType codec
+    IR.irType codec
         |> exhaustiveAdapter
         |> Exhaustive.andThen
             (\x ->
-                case IR.fromIR codec x of
+                case IR.toOutput codec x of
                     Ok y ->
                         Exhaustive.constant y
 

@@ -14,14 +14,14 @@ module IR exposing
     , custom
     , endCustom
     , float
-    , fromIR
+    , fromInput
     , int
+    , irType
     , list
     , map
     , string
     , succeed
-    , toIR
-    , toIRType
+    , toOutput
     , variant0
     , variant1
     , variant2
@@ -36,9 +36,9 @@ type Error
 
 type Codec input output
     = Codec
-        { toIR : input -> IR
-        , fromIR : IR -> Result Error output
-        , toIRType : IRType
+        { fromInput : input -> IR
+        , toOutput : IR -> Result Error output
+        , irType : IRType
         }
 
 
@@ -76,26 +76,26 @@ type VariantType
     | Variant2Type IRType IRType
 
 
-toIR : Codec input output -> input -> IR
-toIR (Codec c) =
-    c.toIR
+fromInput : Codec input output -> input -> IR
+fromInput (Codec c) =
+    c.fromInput
 
 
-toIRType : Codec input output -> IRType
-toIRType (Codec c) =
-    c.toIRType
+irType : Codec input output -> IRType
+irType (Codec c) =
+    c.irType
 
 
-fromIR : Codec input output -> IR -> Result Error output
-fromIR (Codec c) =
-    c.fromIR
+toOutput : Codec input output -> IR -> Result Error output
+toOutput (Codec c) =
+    c.toOutput
 
 
 bool : Codec Bool Bool
 bool =
     Codec
-        { toIR = Bool
-        , fromIR =
+        { fromInput = Bool
+        , toOutput =
             \ir ->
                 case ir of
                     Bool b ->
@@ -103,15 +103,15 @@ bool =
 
                     _ ->
                         Err Error
-        , toIRType = BoolType
+        , irType = BoolType
         }
 
 
 char : Codec Char Char
 char =
     Codec
-        { toIR = Char
-        , fromIR =
+        { fromInput = Char
+        , toOutput =
             \ir ->
                 case ir of
                     Char c ->
@@ -119,15 +119,15 @@ char =
 
                     _ ->
                         Err Error
-        , toIRType = CharType
+        , irType = CharType
         }
 
 
 string : Codec String String
 string =
     Codec
-        { toIR = String
-        , fromIR =
+        { fromInput = String
+        , toOutput =
             \ir ->
                 case ir of
                     String s ->
@@ -135,15 +135,15 @@ string =
 
                     _ ->
                         Err Error
-        , toIRType = StringType
+        , irType = StringType
         }
 
 
 int : Codec Int Int
 int =
     Codec
-        { toIR = Int
-        , fromIR =
+        { fromInput = Int
+        , toOutput =
             \ir ->
                 case ir of
                     Int i ->
@@ -151,15 +151,15 @@ int =
 
                     _ ->
                         Err Error
-        , toIRType = IntType
+        , irType = IntType
         }
 
 
 float : Codec Float Float
 float =
     Codec
-        { toIR = Float
-        , fromIR =
+        { fromInput = Float
+        , toOutput =
             \ir ->
                 case ir of
                     Float s ->
@@ -167,24 +167,24 @@ float =
 
                     _ ->
                         Err Error
-        , toIRType = FloatType
+        , irType = FloatType
         }
 
 
 list : Codec a a -> Codec (List a) (List a)
 list (Codec item) =
     Codec
-        { toIR = \items -> List (List.map item.toIR items)
-        , fromIR =
+        { fromInput = \items -> List (List.map item.fromInput items)
+        , toOutput =
             \ir ->
                 case ir of
                     List items ->
-                        List.map item.fromIR items
+                        List.map item.toOutput items
                             |> Result.Extra.combine
 
                     _ ->
                         Err Error
-        , toIRType = ListType item.toIRType
+        , irType = ListType item.irType
         }
 
 
@@ -239,17 +239,17 @@ variant1 :
 variant1 ctor (Codec argfns) (CustomCodec prev) =
     let
         thisVariant =
-            Variant1Type argfns.toIRType
+            Variant1Type argfns.irType
     in
     CustomCodec
-        { match = prev.match <| \arg -> Custom prev.index (Variant1 (argfns.toIR arg))
+        { match = prev.match <| \arg -> Custom prev.index (Variant1 (argfns.fromInput arg))
         , index = prev.index + 1
         , fromIR =
             \ir ->
                 case ir of
                     Custom selected (Variant1 arg) ->
                         if selected == prev.index then
-                            Result.map ctor (argfns.fromIR arg)
+                            Result.map ctor (argfns.toOutput arg)
 
                         else
                             prev.fromIR ir
@@ -269,17 +269,17 @@ variant2 :
 variant2 ctor (Codec arg1fns) (Codec arg2fns) (CustomCodec prev) =
     let
         thisVariant =
-            Variant2Type arg1fns.toIRType arg2fns.toIRType
+            Variant2Type arg1fns.irType arg2fns.irType
     in
     CustomCodec
-        { match = prev.match <| \arg1 arg2 -> Custom prev.index (Variant2 (arg1fns.toIR arg1) (arg2fns.toIR arg2))
+        { match = prev.match <| \arg1 arg2 -> Custom prev.index (Variant2 (arg1fns.fromInput arg1) (arg2fns.fromInput arg2))
         , index = prev.index + 1
         , fromIR =
             \ir ->
                 case ir of
                     Custom selected (Variant2 arg1 arg2) ->
                         if selected == prev.index then
-                            Result.map2 ctor (arg1fns.fromIR arg1) (arg2fns.fromIR arg2)
+                            Result.map2 ctor (arg1fns.toOutput arg1) (arg2fns.toOutput arg2)
 
                         else
                             prev.fromIR ir
@@ -293,9 +293,9 @@ variant2 ctor (Codec arg1fns) (Codec arg2fns) (CustomCodec prev) =
 endCustom : CustomCodec (input -> IR) () output -> Codec input output
 endCustom (CustomCodec prev) =
     Codec
-        { toIR = prev.match
-        , fromIR = prev.fromIR
-        , toIRType =
+        { fromInput = prev.match
+        , toOutput = prev.fromIR
+        , irType =
             case prev.variantTypes of
                 [] ->
                     -- we know this can't happen, because if the second type
@@ -313,8 +313,8 @@ endCustom (CustomCodec prev) =
 succeed : output -> Codec input output
 succeed ctor =
     Codec
-        { toIR = \_ -> Product []
-        , fromIR =
+        { fromInput = \_ -> Product []
+        , toOutput =
             \ir ->
                 case ir of
                     Product [] ->
@@ -322,7 +322,7 @@ succeed ctor =
 
                     _ ->
                         Err Error
-        , toIRType = ProductType []
+        , irType = ProductType []
         }
 
 
@@ -333,31 +333,31 @@ andMap :
     -> Codec input output
 andMap getter (Codec this) (Codec prev) =
     Codec
-        { toIR =
+        { fromInput =
             \a ->
-                case prev.toIR a of
+                case prev.fromInput a of
                     Product prevFields ->
-                        Product (this.toIR (getter a) :: prevFields)
+                        Product (this.fromInput (getter a) :: prevFields)
 
                     _ ->
-                        Product [ this.toIR (getter a) ]
-        , fromIR =
+                        Product [ this.fromInput (getter a) ]
+        , toOutput =
             \ir ->
                 case ir of
                     Product (thisField :: prevFields) ->
                         Result.map2 (\ctor val -> ctor val)
-                            (prev.fromIR (Product prevFields))
-                            (this.fromIR thisField)
+                            (prev.toOutput (Product prevFields))
+                            (this.toOutput thisField)
 
                     _ ->
                         Err Error
-        , toIRType =
-            case prev.toIRType of
+        , irType =
+            case prev.irType of
                 ProductType prevFieldTypes ->
-                    ProductType (this.toIRType :: prevFieldTypes)
+                    ProductType (this.irType :: prevFieldTypes)
 
                 _ ->
-                    ProductType [ this.toIRType ]
+                    ProductType [ this.irType ]
         }
 
 
@@ -367,9 +367,9 @@ map :
     -> Codec input output2
 map f (Codec prev) =
     Codec
-        { toIR = prev.toIR
-        , fromIR = prev.fromIR >> Result.map f
-        , toIRType = prev.toIRType
+        { fromInput = prev.fromInput
+        , toOutput = prev.toOutput >> Result.map f
+        , irType = prev.irType
         }
 
 
@@ -379,9 +379,9 @@ contramap :
     -> Codec input2 output
 contramap f (Codec prev) =
     Codec
-        { toIR = f >> prev.toIR
-        , fromIR = prev.fromIR
-        , toIRType = prev.toIRType
+        { fromInput = f >> prev.fromInput
+        , toOutput = prev.toOutput
+        , irType = prev.irType
         }
 
 
@@ -391,7 +391,7 @@ andThen :
     -> Codec input output2
 andThen f (Codec prev) =
     Codec
-        { toIR = prev.toIR
-        , fromIR = prev.fromIR >> Result.andThen f
-        , toIRType = prev.toIRType
+        { fromInput = prev.fromInput
+        , toOutput = prev.toOutput >> Result.andThen f
+        , irType = prev.irType
         }

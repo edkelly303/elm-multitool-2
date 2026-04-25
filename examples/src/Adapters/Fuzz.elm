@@ -4,13 +4,13 @@ import Fuzz
 import IR exposing (IR, IRType)
 
 
-fuzzer : IR.Codec a b -> Fuzz.Fuzzer b
+fuzzer : IR.Codec input output -> Fuzz.Fuzzer output
 fuzzer codec =
-    IR.toIRType codec
+    IR.irType codec
         |> fuzzAdapter
         |> Fuzz.andThen
             (\x ->
-                case IR.fromIR codec x of
+                case IR.toOutput codec x of
                     Ok y ->
                         Fuzz.constant y
 

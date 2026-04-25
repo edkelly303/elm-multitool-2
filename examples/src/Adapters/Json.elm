@@ -7,18 +7,18 @@ import Json.Decode as JD
 import Json.Encode as JE
 
 
-encode : IR.Codec a b -> a -> JE.Value
+encode : IR.Codec input output -> input -> JE.Value
 encode codec value =
-    IR.toIR codec value
+    IR.fromInput codec value
         |> encodeAdapter
 
 
-decoder : IR.Codec a b -> JD.Decoder b
+decoder : IR.Codec input output -> JD.Decoder output
 decoder codec =
     decodeAdapter
         |> JD.andThen
             (\ir ->
-                case IR.fromIR codec ir of
+                case IR.toOutput codec ir of
                     Ok s ->
                         JD.succeed s
 

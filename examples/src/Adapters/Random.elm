@@ -9,13 +9,13 @@ import Random.Int
 import Random.String
 
 
-generator : IR.Codec a b -> Random.Generator b
+generator : IR.Codec input output -> Random.Generator output
 generator codec =
-    IR.toIRType codec
+    IR.irType codec
         |> randomAdapter
         |> Random.andThen
             (\ir ->
-                case IR.fromIR codec ir of
+                case IR.toOutput codec ir of
                     Ok b ->
                         Random.constant b
 

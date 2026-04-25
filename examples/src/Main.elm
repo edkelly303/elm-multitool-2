@@ -6,7 +6,7 @@ import Adapters.Json
 import Adapters.Random
 import Fuzz
 import Html
-import IR exposing (Codec)
+import IR
 import Json.Decode as JD
 import Json.Encode as JE
 import Random
@@ -24,15 +24,15 @@ type alias Record =
     }
 
 
-recordCodec : Codec Record Record
+recordCodec : IR.Codec Record Record
 recordCodec =
     IR.succeed Record
         |> IR.andMap .field1 IR.bool
         |> IR.andMap .field2 IR.bool
 
 
-exampleMultitool : Codec Example Example
-exampleMultitool =
+exampleCodec : IR.Codec Example Example
+exampleCodec =
     IR.custom
         (\red yellow green value ->
             case value of
@@ -53,32 +53,32 @@ exampleMultitool =
 
 exampleFuzzer : Fuzz.Fuzzer Example
 exampleFuzzer =
-    Adapters.Fuzz.fuzzer exampleMultitool
+    Adapters.Fuzz.fuzzer exampleCodec
 
 
 exampleDecoder : JD.Decoder Example
 exampleDecoder =
-    Adapters.Json.decoder exampleMultitool
+    Adapters.Json.decoder exampleCodec
 
 
 encodeExample : Example -> JE.Value
 encodeExample =
-    Adapters.Json.encode exampleMultitool
+    Adapters.Json.encode exampleCodec
 
 
 diffExample : Example -> Example -> Adapters.Diff.Diff
 diffExample =
-    Adapters.Diff.diff exampleMultitool
+    Adapters.Diff.diff exampleCodec
 
 
 patchExample : Adapters.Diff.Diff -> Example -> Result IR.Error Example
 patchExample =
-    Adapters.Diff.patch exampleMultitool
+    Adapters.Diff.patch exampleCodec
 
 
 exampleGenerator : Random.Generator Example
 exampleGenerator =
-    Adapters.Random.generator exampleMultitool
+    Adapters.Random.generator exampleCodec
 
 
 

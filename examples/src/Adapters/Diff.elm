@@ -8,14 +8,14 @@ type alias Diff =
     Maybe IR
 
 
-diff : IR.Codec a a -> a -> a -> Diff
+diff : IR.Codec output output -> output -> output -> Diff
 diff codec old new =
     let
         oldIR =
-            IR.toIR codec old
+            IR.fromInput codec old
 
         newIR =
-            IR.toIR codec new
+            IR.fromInput codec new
 
         help oldIR_ newIR_ =
             case ( oldIR_, newIR_ ) of
@@ -67,13 +67,13 @@ patch codec delta old =
         maybeNewIR =
             Maybe.andThen
                 (\changes ->
-                    help changes (IR.toIR codec old)
+                    help changes (IR.fromInput codec old)
                 )
                 delta
     in
     case maybeNewIR of
         Just ir ->
-            IR.fromIR codec ir
+            IR.toOutput codec ir
 
         Nothing ->
             Err IR.Error
