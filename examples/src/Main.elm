@@ -3,11 +3,13 @@ module Main exposing (..)
 import Adapters.Diff
 import Adapters.Fuzz
 import Adapters.Json
+import Adapters.Random
 import Fuzz
 import Html
 import IR exposing (Codec)
 import Json.Decode as JD
 import Json.Encode as JE
+import Random
 
 
 type Example
@@ -64,14 +66,19 @@ encodeExample =
     Adapters.Json.encode exampleMultitool
 
 
-diffExample : Record -> Record -> Adapters.Diff.Diff
+diffExample : Example -> Example -> Adapters.Diff.Diff
 diffExample =
-    Adapters.Diff.diff recordCodec
+    Adapters.Diff.diff exampleMultitool
 
 
-patchExample : Adapters.Diff.Diff -> Record -> Result IR.Error Record
+patchExample : Adapters.Diff.Diff -> Example -> Result IR.Error Example
 patchExample =
-    Adapters.Diff.patch recordCodec
+    Adapters.Diff.patch exampleMultitool
+
+
+exampleGenerator : Random.Generator Example
+exampleGenerator =
+    Adapters.Random.generator exampleMultitool
 
 
 
@@ -95,11 +102,11 @@ main =
         decoded =
             JD.decodeString (JD.list exampleDecoder) encoded
 
-        old =
-            { field1 = False, field2 = False }
+        ( old, seed ) =
+            Random.step exampleGenerator (Random.initialSeed 1000)
 
-        new =
-            { field1 = True, field2 = False }
+        ( new, _ ) =
+            Random.step exampleGenerator seed
 
         diff =
             diffExample old new
@@ -110,14 +117,17 @@ main =
     Html.pre []
         [ head "Fuzzer"
         , show fuzzed
-        , head "JSON encoder"
-        , Html.text encoded
-        , head "JSON decoder"
-        , show decoded
+        , head "Generator"
+        , show old
+        , show new
         , head "Diff"
         , show diff
         , head "Patch"
         , show patched
+        , head "JSON encoder"
+        , Html.text encoded
+        , head "JSON decoder"
+        , show decoded
 
         -- there's something really slow about the exhaustive generator adapter,
         -- let's switch it off for now...
