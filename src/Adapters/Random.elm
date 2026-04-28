@@ -63,8 +63,8 @@ randomAdapter irType =
                                 (randomAdapter arg2)
             in
             Random.Extra.choices
-                (variantTypeToGenerator (List.length restVariants) firstVariant)
-                (List.indexedMap variantTypeToGenerator (List.reverse restVariants))
+                (variantTypeToGenerator 0 firstVariant)
+                (List.indexedMap (\idx v -> variantTypeToGenerator (idx + 1) v) restVariants)
 
         IR.ProductType fields ->
             fields

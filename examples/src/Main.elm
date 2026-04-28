@@ -103,7 +103,7 @@ main =
             JD.decodeString exampleDecoder encoded
 
         ( old, seed ) =
-            Random.step exampleGenerator (Random.initialSeed 0)
+            Random.step exampleGenerator (Random.initialSeed 14)
 
         ( new, _ ) =
             Random.step exampleGenerator seed
@@ -117,8 +117,11 @@ main =
     Html.pre []
         [ head "Generator ('old' value)"
         , show old
+        , show (IR.fromInput exampleCodec old)
+        , show (IR.irType exampleCodec)
         , head "Generator ('new' value)"
         , show new
+        , show (IR.fromInput exampleCodec new)
         , head "Diff between 'old' & 'new'"
         , show diff
         , head "Patch 'old' with diff"
@@ -145,4 +148,4 @@ head txt =
 
 show : a -> Html.Html msg
 show a =
-    Html.text (Debug.toString a)
+    Html.div [] [Html.text (Debug.toString a)]

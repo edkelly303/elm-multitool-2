@@ -15,7 +15,7 @@ fuzzer codec =
                         Fuzz.constant y
 
                     Err IR.Error ->
-                        Fuzz.invalid ""
+                        Fuzz.invalid "invalid fuzzer!"
             )
 
 
@@ -35,7 +35,7 @@ fuzzAdapter irType =
             Fuzz.int |> Fuzz.map IR.Int
 
         IR.FloatType ->
-            Fuzz.float |> Fuzz.map IR.Float
+            Fuzz.niceFloat |> Fuzz.map IR.Float
 
         IR.CustomType firstVariant restVariants ->
             Fuzz.oneOf
@@ -57,7 +57,7 @@ fuzzAdapter irType =
                                     (fuzzAdapter arg1)
                                     (fuzzAdapter arg2)
                     )
-                    (List.reverse (firstVariant :: restVariants))
+                    (firstVariant :: restVariants)
                 )
 
         IR.ProductType fields ->

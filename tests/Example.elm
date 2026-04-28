@@ -1,10 +1,90 @@
 module Example exposing (..)
 
-import Expect exposing (Expectation)
-import Fuzz exposing (Fuzzer, int, list, string)
+import Adapters.Diff
+import Adapters.Fuzz
+import Expect
+import Fuzz exposing (Fuzzer)
+import IR
 import Test exposing (..)
+
+
+type alias Record =
+    { bool : Bool
+    , int : Int
+    , float : Float
+    , string : String
+    , char : Char
+    , custom : Custom
+    }
+
+
+recordCodec : IR.Codec Record Record
+recordCodec =
+    IR.succeed Record
+        |> IR.andMap .bool IR.bool
+        |> IR.andMap .int IR.int
+        |> IR.andMap .float IR.float
+        |> IR.andMap .string IR.string
+        |> IR.andMap .char IR.char
+        |> IR.andMap .custom customCodec
+
+
+type Custom
+    = Var0
+    | Var1 Bool
+    | Var2 Int ( Bool, Char )
+
+
+customCodec : IR.Codec Custom Custom
+customCodec =
+    IR.custom
+        (\v0 v1 v2 v ->
+            case v of
+                Var0 ->
+                    v0
+
+                Var1 l ->
+                    v1 l
+
+                Var2 i r ->
+                    v2 i r
+        )
+        |> IR.variant0 Var0
+        |> IR.variant1 Var1 IR.bool
+        |> IR.variant2 Var2
+            IR.int
+            (IR.succeed Tuple.pair
+                |> IR.andMap Tuple.first IR.bool
+                |> IR.andMap Tuple.second IR.char
+            )
+        |> IR.endCustom
+
+
+recordFuzzer : Fuzzer Record
+recordFuzzer =
+    Adapters.Fuzz.fuzzer recordCodec
 
 
 suite : Test
 suite =
-    todo "Implement our first test. See https://package.elm-lang.org/packages/elm-explorations/test/latest for how to do this!"
+    Test.describe "Diff"
+        [ fuzz2 recordFuzzer recordFuzzer "record diff -> patch roundtrip" <|
+            \old new ->
+                let
+                    diff =
+                        Adapters.Diff.diff recordCodec old new
+
+                    patched =
+                        Adapters.Diff.patch recordCodec diff old
+                in
+                Expect.equal (Ok new) patched
+        , fuzz2 (Adapters.Fuzz.fuzzer IR.int) (Adapters.Fuzz.fuzzer IR.int) "int" <|
+            \i1 i2 ->
+                let
+                    diff =
+                        Adapters.Diff.diff IR.int i1 i2
+                in
+                Expect.equal
+                    (Adapters.Diff.patch IR.int diff i1)
+                    (Ok i2)
+        ]

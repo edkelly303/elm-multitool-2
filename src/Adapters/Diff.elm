@@ -3,7 +3,7 @@ module Adapters.Diff exposing (..)
 import Dict
 import IR
 import List.Extra
-import Maybe.Extra
+import Result.Extra
 
 
 type Diff
@@ -35,53 +35,57 @@ diff codec old new =
         newIR =
             IR.fromInput codec new
 
-        help oldIR_ newIR_ =
-            case ( oldIR_, newIR_ ) of
-                ( IR.Bool b1, IR.Bool b2 ) ->
+        irType =
+            IR.irType codec
+
+        help oldIR_ newIR_ irType_ =
+            case ( oldIR_, newIR_, irType_ ) of
+                ( IR.Bool b1, IR.Bool b2, _ ) ->
                     if b1 == b2 then
                         Changes []
 
                     else
                         BoolChange b2
 
-                ( IR.String b1, IR.String b2 ) ->
+                ( IR.String b1, IR.String b2, _ ) ->
                     if b1 == b2 then
                         Changes []
 
                     else
                         StringChange b2
 
-                ( IR.Char b1, IR.Char b2 ) ->
+                ( IR.Char b1, IR.Char b2, _ ) ->
                     if b1 == b2 then
                         Changes []
 
                     else
                         CharChange b2
 
-                ( IR.Float b1, IR.Float b2 ) ->
+                ( IR.Float b1, IR.Float b2, _ ) ->
                     if b1 == b2 then
                         Changes []
 
                     else
                         FloatChange b2
 
-                ( IR.Int b1, IR.Int b2 ) ->
+                ( IR.Int b1, IR.Int b2, _ ) ->
                     if b1 == b2 then
                         Changes []
 
                     else
                         IntChange b2
 
-                ( IR.Product fields1, IR.Product fields2 ) ->
+                ( IR.Product fields1, IR.Product fields2, IR.ProductType fieldTypes ) ->
                     if List.length fields1 == List.length fields2 then
-                        List.map2 help fields1 fields2
+                        List.map3 help fields1 fields2 fieldTypes
                             |> List.indexedMap Tuple.pair
+                            |> List.filter (\( _, arg ) -> arg /= Changes [])
                             |> Changes
 
                     else
                         Changes []
 
-                ( IR.Custom oldSelected oldVariant, IR.Custom newSelected newVariant ) ->
+                ( IR.Custom oldSelected oldVariant, IR.Custom newSelected newVariant, IR.CustomType firstVariantType restVariantTypes ) ->
                     let
                         argsToList variant =
                             case variant of
@@ -94,8 +98,24 @@ diff codec old new =
                                 IR.Variant2 a1 a2 ->
                                     [ a1, a2 ]
 
+                        argTypesToList variantType =
+                            case variantType of
+                                IR.Variant0Type ->
+                                    []
+
+                                IR.Variant1Type a ->
+                                    [ a ]
+
+                                IR.Variant2Type a1 a2 ->
+                                    [ a1, a2 ]
+
                         newArgs =
                             argsToList newVariant
+
+                        newArgTypes =
+                            List.Extra.getAt newSelected (firstVariantType :: restVariantTypes)
+                                |> Maybe.withDefault firstVariantType
+                                |> argTypesToList
                     in
                     if oldSelected == newSelected then
                         let
@@ -103,10 +123,10 @@ diff codec old new =
                                 argsToList oldVariant
 
                             diffedArgs =
-                                List.Extra.zip oldArgs newArgs
+                                List.Extra.zip3 oldArgs newArgs newArgTypes
                                     |> List.indexedMap
-                                        (\idx ( oldArg, newArg ) ->
-                                            ( idx, help oldArg newArg )
+                                        (\idx ( oldArg, newArg, argType ) ->
+                                            ( idx, help oldArg newArg argType )
                                         )
                                     |> List.filter (\( _, arg ) -> arg /= Changes [])
                         in
@@ -115,8 +135,8 @@ diff codec old new =
                     else
                         let
                             diffedArgs =
-                                newArgs
-                                    |> List.indexedMap (\idx newArg -> ( idx, help (default newArg) newArg ))
+                                List.Extra.zip newArgs newArgTypes
+                                    |> List.indexedMap (\idx ( newArg, argType ) -> ( idx, help (default argType) newArg argType ))
                                     |> List.filter (\( _, arg ) -> arg /= Changes [])
                         in
                         CustomChanges newSelected diffedArgs
@@ -124,49 +144,11 @@ diff codec old new =
                 _ ->
                     Changes []
     in
-    help oldIR newIR
+    help oldIR newIR irType
 
 
-default : IR.IR -> IR.IR
+default : IR.IRType -> IR.IR
 default irType =
-    case irType of
-        IR.Bool _ ->
-            IR.Bool True
-
-        IR.Char _ ->
-            IR.Char ' '
-
-        IR.String _ ->
-            IR.String ""
-
-        IR.Int _ ->
-            IR.Int 0
-
-        IR.Float _ ->
-            IR.Float 0.0
-
-        IR.Custom selected variant ->
-            IR.Custom selected
-                (case variant of
-                    IR.Variant0 ->
-                        IR.Variant0
-
-                    IR.Variant1 arg ->
-                        IR.Variant1 (default arg)
-
-                    IR.Variant2 arg1 arg2 ->
-                        IR.Variant2 (default arg1) (default arg2)
-                )
-
-        IR.Product fields ->
-            IR.Product (List.map default fields)
-
-        IR.List _ ->
-            IR.List []
-
-
-defaultFromType : IR.IRType -> IR.IR
-defaultFromType irType =
     case irType of
         IR.BoolType ->
             IR.Bool True
@@ -190,41 +172,41 @@ defaultFromType irType =
                         IR.Variant0
 
                     IR.Variant1Type arg ->
-                        IR.Variant1 (defaultFromType arg)
+                        IR.Variant1 (default arg)
 
                     IR.Variant2Type arg1 arg2 ->
-                        IR.Variant2 (defaultFromType arg1) (defaultFromType arg2)
+                        IR.Variant2 (default arg1) (default arg2)
                 )
 
         IR.ProductType fieldTypes ->
-            IR.Product (List.map defaultFromType fieldTypes)
+            IR.Product (List.map default fieldTypes)
 
         IR.ListType _ ->
             IR.List []
 
 
-patch : IR.Codec a a -> Diff -> a -> Result IR.Error a
+patch : IR.Codec a a -> Diff -> a -> Result String a
 patch codec delta old =
     let
         help changes_ old_ irType_ =
             case ( changes_, old_, irType_ ) of
                 ( Changes [], any, _ ) ->
-                    Just any
+                    Ok any
 
                 ( BoolChange b, IR.Bool _, _ ) ->
-                    Just (IR.Bool b)
+                    Ok (IR.Bool b)
 
                 ( CharChange b, IR.Char _, _ ) ->
-                    Just (IR.Char b)
+                    Ok (IR.Char b)
 
                 ( StringChange b, IR.String _, _ ) ->
-                    Just (IR.String b)
+                    Ok (IR.String b)
 
                 ( IntChange b, IR.Int _, _ ) ->
-                    Just (IR.Int b)
+                    Ok (IR.Int b)
 
-                ( FloatChange b, IR.Int _, _ ) ->
-                    Just (IR.Float b)
+                ( FloatChange b, IR.Float _, _ ) ->
+                    Ok (IR.Float b)
 
                 ( Changes fieldChanges, IR.Product oldFields, IR.ProductType fieldTypes ) ->
                     let
@@ -236,13 +218,13 @@ patch codec delta old =
                             (\idx ( oldField, fieldType ) ->
                                 case Dict.get idx fieldChangesDict of
                                     Nothing ->
-                                        Just oldField
+                                        Ok oldField
 
                                     Just change ->
                                         help change oldField fieldType
                             )
-                        |> Maybe.Extra.combine
-                        |> Maybe.map IR.Product
+                        |> Result.Extra.combine
+                        |> Result.map IR.Product
 
                 ( CustomChanges diffSelected diffVariant, IR.Custom oldSelected oldVariant, IR.CustomType firstVariantType restVariantTypes ) ->
                     let
@@ -250,11 +232,12 @@ patch codec delta old =
                             Dict.fromList diffVariant
                     in
                     List.Extra.getAt diffSelected (firstVariantType :: restVariantTypes)
-                        |> Maybe.andThen
+                        |> Result.fromMaybe ""
+                        |> Result.andThen
                             (\variantType ->
                                 case variantType of
                                     IR.Variant0Type ->
-                                        Just IR.Variant0
+                                        Ok IR.Variant0
 
                                     IR.Variant1Type argType ->
                                         if diffSelected == oldSelected then
@@ -262,21 +245,21 @@ patch codec delta old =
                                                 IR.Variant1 arg ->
                                                     case Dict.get 0 argsDict of
                                                         Nothing ->
-                                                            Just (IR.Variant1 arg)
+                                                            Ok (IR.Variant1 arg)
 
                                                         Just changes ->
-                                                            Maybe.map IR.Variant1 (help changes arg argType)
+                                                            Result.map IR.Variant1 (help changes arg argType)
 
                                                 _ ->
-                                                    Nothing
+                                                    Err ""
 
                                         else
                                             case Dict.get 0 argsDict of
                                                 Nothing ->
-                                                    Just (IR.Variant1 (defaultFromType argType))
+                                                    Ok (IR.Variant1 (default argType))
 
                                                 Just changes ->
-                                                    Maybe.map IR.Variant1 (help changes (defaultFromType argType) argType)
+                                                    Result.map IR.Variant1 (help changes (default argType) argType)
 
                                     IR.Variant2Type arg1Type arg2Type ->
                                         if diffSelected == oldSelected then
@@ -286,7 +269,7 @@ patch codec delta old =
                                                         arg1Diff =
                                                             case Dict.get 0 argsDict of
                                                                 Nothing ->
-                                                                    Just arg1
+                                                                    Ok arg1
 
                                                                 Just changes ->
                                                                     help changes arg1 arg1Type
@@ -294,40 +277,40 @@ patch codec delta old =
                                                         arg2Diff =
                                                             case Dict.get 1 argsDict of
                                                                 Nothing ->
-                                                                    Just arg2
+                                                                    Ok arg2
 
                                                                 Just changes ->
                                                                     help changes arg2 arg2Type
                                                     in
-                                                    Maybe.map2 IR.Variant2 arg1Diff arg2Diff
+                                                    Result.map2 IR.Variant2 arg1Diff arg2Diff
 
                                                 _ ->
-                                                    Nothing
+                                                    Err ""
 
                                         else
                                             let
                                                 arg1Diff =
                                                     case Dict.get 0 argsDict of
                                                         Nothing ->
-                                                            Just (defaultFromType arg1Type)
+                                                            Ok (default arg1Type)
 
                                                         Just changes ->
-                                                            help changes (defaultFromType arg1Type) arg1Type
+                                                            help changes (default arg1Type) arg1Type
 
                                                 arg2Diff =
                                                     case Dict.get 1 argsDict of
                                                         Nothing ->
-                                                            Just (defaultFromType arg2Type)
+                                                            Ok (default arg2Type)
 
                                                         Just changes ->
-                                                            help changes (defaultFromType arg2Type) arg2Type
+                                                            help changes (default arg2Type) arg2Type
                                             in
-                                            Maybe.map2 IR.Variant2 arg1Diff arg2Diff
+                                            Result.map2 IR.Variant2 arg1Diff arg2Diff
                             )
-                        |> Maybe.map (IR.Custom diffSelected)
+                        |> Result.map (IR.Custom diffSelected)
 
-                _ ->
-                    Nothing
+                ( diff_, old__, type_ ) ->
+                    Err ("mismatch between \n" ++ Debug.toString diff_ ++ "\n" ++ Debug.toString old__ ++ "\n" ++ Debug.toString type_)
 
         oldIR =
             IR.fromInput codec old
@@ -339,8 +322,8 @@ patch codec delta old =
             help delta oldIR irType
     in
     case maybeNewIR of
-        Just ir ->
-            IR.toOutput codec ir
+        Ok ir ->
+            IR.toOutput codec ir |> Result.mapError (\_ -> "IR.toOutput failed")
 
-        Nothing ->
-            Err IR.Error
+        Err e ->
+            Err e

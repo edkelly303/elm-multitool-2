@@ -372,7 +372,7 @@ endCustom (CustomCodec prev) =
         { fromInput = prev.match
         , toOutput = prev.fromIR
         , irType =
-            case prev.variantTypes of
+            case List.reverse prev.variantTypes of
                 [] ->
                     -- we know this can't happen, because if the second type
                     -- variable of CustomCodec is `()`, then we know that we've
