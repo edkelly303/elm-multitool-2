@@ -1,5 +1,5 @@
 {
-  description = "elm-multitool-2";
+  description = "elm-ir";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
@@ -30,7 +30,7 @@
         ];
         shellHook = ''
           DEVDIR="$PWD"
-          echo -e "\n\033[1m*** Entering development shell for elm-multitool-2 ***\033[0m\n"
+          echo -e "\n\033[1m*** Entering development shell for elm-ir ***\033[0m\n"
 
           echo -e -n "Updating repos... "
           (cd $DEVDIR && git pull --quiet &)

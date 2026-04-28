@@ -1,6 +1,6 @@
 {
     "targets": {
-        "elm-multitool-2": {
+        "elm-ir": {
             "inputs": [
                 "src/Main.elm"
             ],
