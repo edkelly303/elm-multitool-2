@@ -71,7 +71,7 @@ diffExample =
     Adapters.Diff.diff exampleCodec
 
 
-patchExample : Adapters.Diff.Diff -> Example -> Result IR.Error Example
+patchExample : Adapters.Diff.Diff -> Example -> Result String Example
 patchExample =
     Adapters.Diff.patch exampleCodec
 
@@ -79,15 +79,6 @@ patchExample =
 exampleGenerator : Random.Generator Example
 exampleGenerator =
     Adapters.Random.generator exampleCodec
-
-
-
--- there's something really slow about the exhaustive generator adapter, let's
--- switch it off for now...
---
--- exhaustive : Exhaustive.Generator Example
--- exhaustive =
---     Adapters.exhaustive exampleMultitool
 
 
 main : Html.Html msg
@@ -132,12 +123,6 @@ main =
         , show decoded
         , head "Fuzzer"
         , show fuzzed
-
-        -- there's something really slow about the exhaustive generator adapter,
-        -- let's switch it off for now...
-        --
-        -- , head "Exhaustive generator"
-        -- , show (exhaustive.nth 0)
         ]
 
 
