@@ -3,7 +3,7 @@ module IR exposing
     , IR(..), Variant(..), fromInput, toOutput, Error(..)
     , IRType(..), VariantType(..), irType
     , bool, char, string, int, float
-    , list
+    , list, maybe, result, tuple, triple
     , succeed, andMap
     , CustomCodec, custom, variant0, variant1, variant2, endCustom
     , map, contramap, andThen
@@ -42,10 +42,10 @@ Convert between Elm data types and an intermediate representation (IR)
 
 ### Common data types
 
-@docs list
+@docs list, maybe, result, tuple, triple
 
 
-### Product types (records, tuples and triples)
+### Record types
 
 @docs succeed, andMap
 
@@ -250,6 +250,53 @@ list (Codec item) =
                         Err Error
         , irType = ListType item.irType
         }
+
+
+maybe : Codec a a -> Codec (Maybe a) (Maybe a)
+maybe item =
+    custom
+        (\just nothing variant ->
+            case variant of
+                Just a ->
+                    just a
+
+                Nothing ->
+                    nothing
+        )
+        |> variant1 Just item
+        |> variant0 Nothing
+        |> endCustom
+
+
+result : Codec x x -> Codec a a -> Codec (Result x a) (Result x a)
+result x a =
+    custom
+        (\err ok variant ->
+            case variant of
+                Err x_ ->
+                    err x_
+
+                Ok a_ ->
+                    ok a_
+        )
+        |> variant1 Err x
+        |> variant1 Ok a
+        |> endCustom
+
+
+tuple : Codec a a -> Codec b b -> Codec ( a, b ) ( a, b )
+tuple a b =
+    succeed Tuple.pair
+        |> andMap Tuple.first a
+        |> andMap Tuple.second b
+
+
+triple : Codec a a -> Codec b b -> Codec c c -> Codec ( a, b, c ) ( a, b, c )
+triple a b c =
+    succeed (\a_ b_ c_ -> ( a_, b_, c_ ))
+        |> andMap (\( a_, _, _ ) -> a_) a
+        |> andMap (\( _, b_, _ ) -> b_) b
+        |> andMap (\( _, _, c_ ) -> c_) c
 
 
 {-| TODO
