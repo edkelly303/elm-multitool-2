@@ -31,7 +31,7 @@ recordCodec =
 
 type Custom
     = Var0
-    | Var1 Bool
+    | Var1 (List Bool)
     | Var2 Int ( Bool, Char )
 
 
@@ -50,7 +50,7 @@ customCodec =
                     v2 i r
         )
         |> IR.variant0 Var0
-        |> IR.variant1 Var1 IR.bool
+        |> IR.variant1 Var1 (IR.list IR.bool)
         |> IR.variant2 Var2 IR.int (IR.tuple IR.bool IR.char)
         |> IR.endCustom
 
