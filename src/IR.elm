@@ -252,6 +252,8 @@ list (Codec item) =
         }
 
 
+{-| TODO
+-}
 maybe : Codec a a -> Codec (Maybe a) (Maybe a)
 maybe item =
     custom
@@ -268,6 +270,8 @@ maybe item =
         |> endCustom
 
 
+{-| TODO
+-}
 result : Codec x x -> Codec a a -> Codec (Result x a) (Result x a)
 result x a =
     custom
@@ -284,6 +288,8 @@ result x a =
         |> endCustom
 
 
+{-| TODO
+-}
 tuple : Codec a a -> Codec b b -> Codec ( a, b ) ( a, b )
 tuple a b =
     succeed Tuple.pair
@@ -291,6 +297,8 @@ tuple a b =
         |> andMap Tuple.second b
 
 
+{-| TODO
+-}
 triple : Codec a a -> Codec b b -> Codec c c -> Codec ( a, b, c ) ( a, b, c )
 triple a b c =
     succeed (\a_ b_ c_ -> ( a_, b_, c_ ))
