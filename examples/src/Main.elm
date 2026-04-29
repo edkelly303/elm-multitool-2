@@ -51,72 +51,50 @@ exampleCodec =
         |> IR.endCustom
 
 
-exampleFuzzer : Fuzz.Fuzzer Example
-exampleFuzzer =
-    Adapters.Fuzz.fuzzer exampleCodec
-
-
-exampleDecoder : JD.Decoder Example
-exampleDecoder =
-    Adapters.Json.decoder exampleCodec
-
-
-encodeExample : Example -> JE.Value
-encodeExample =
-    Adapters.Json.encode exampleCodec
-
-
-diffExample : Example -> Example -> Adapters.Diff.Diff
-diffExample =
-    Adapters.Diff.diff exampleCodec
-
-
-patchExample : Adapters.Diff.Diff -> Example -> Result String Example
-patchExample =
-    Adapters.Diff.patch exampleCodec
-
-
-exampleGenerator : Random.Generator Example
-exampleGenerator =
-    Adapters.Random.generator exampleCodec
-
 
 main : Html.Html msg
 main =
     let
+        codec = 
+            IR.list IR.bool
+
         fuzzed =
-            Fuzz.examples 2 exampleFuzzer
+            Fuzz.examples 2 (Adapters.Fuzz.fuzzer codec)
 
         encoded =
-            JE.encode 2 (encodeExample old)
+            JE.encode 2 (Adapters.Json.encode codec old)
 
         decoded =
-            JD.decodeString exampleDecoder encoded
+            JD.decodeString (Adapters.Json.decoder codec) encoded
 
-        ( old, seed ) =
-            Random.step exampleGenerator (Random.initialSeed 0)
+        ( old, _ ) =
+            ([False], ())
+            --Random.step (Adapters.Random.generator codec) (Random.initialSeed 0)
 
         ( new, _ ) =
-            Random.step exampleGenerator seed
+            ([], ())
+            --Random.step (Adapters.Random.generator codec) (Random.initialSeed 1)
 
         diff =
-            diffExample old new
+            Adapters.Diff.diff codec old new
 
         patched =
-            patchExample diff old
+            Adapters.Diff.patch codec diff old
     in
     Html.pre []
         [ head "Generator ('old' value)"
         , show old
-        , show (IR.fromInput exampleCodec old)
-        , show (IR.irType exampleCodec)
+        , show (IR.fromInput codec old)
+        , show (IR.irType codec)
         , head "Generator ('new' value)"
         , show new
-        , show (IR.fromInput exampleCodec new)
+        , show (IR.fromInput codec new)
         , head "Diff between 'old' & 'new'"
         , show diff
         , head "Patch 'old' with diff"
         , show patched
+        , head "Did patch work?"
+        , show (patched == Ok new)
         , head "JSON encoder"
         , Html.text encoded
         , head "JSON decoder"
