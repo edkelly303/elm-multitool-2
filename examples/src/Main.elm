@@ -57,16 +57,6 @@ main =
     let
         codec = 
             IR.list IR.bool
-
-        fuzzed =
-            Fuzz.examples 2 (Adapters.Fuzz.fuzzer codec)
-
-        encoded =
-            JE.encode 2 (Adapters.Json.encode codec old)
-
-        decoded =
-            JD.decodeString (Adapters.Json.decoder codec) encoded
-
         ( old, _ ) =
             ([False], ())
             --Random.step (Adapters.Random.generator codec) (Random.initialSeed 0)
@@ -80,6 +70,17 @@ main =
 
         patched =
             Adapters.Diff.patch codec diff old
+            
+        fuzzed =
+            Fuzz.examples 2 (Adapters.Fuzz.fuzzer codec)
+
+        encoded =
+            JE.encode 2 (Adapters.Json.encode codec old)
+
+        decoded =
+            JD.decodeString (Adapters.Json.decoder codec) encoded
+
+
     in
     Html.pre []
         [ head "Generator ('old' value)"
