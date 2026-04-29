@@ -15,20 +15,20 @@ import Random
 type Example
     = Yellow
     | Green String Record
-    | Red Char (List Int)
+    | Red Char (List Bool)
 
 
 type alias Record =
-    { field1 : Bool
-    , field2 : Bool
+    { field1 : String
+    , field2 : Int
     }
 
 
 recordCodec : IR.Codec Record Record
 recordCodec =
     IR.succeed Record
-        |> IR.andMap .field1 IR.bool
-        |> IR.andMap .field2 IR.bool
+        |> IR.andMap .field1 IR.string
+        |> IR.andMap .field2 IR.int
 
 
 exampleCodec : IR.Codec Example Example
@@ -45,7 +45,7 @@ exampleCodec =
                 Green s r ->
                     green s r
         )
-        |> IR.variant2 Red IR.char (IR.list IR.int)
+        |> IR.variant2 Red IR.char (IR.list IR.bool)
         |> IR.variant0 Yellow
         |> IR.variant2 Green IR.string recordCodec
         |> IR.endCustom
@@ -94,7 +94,7 @@ main =
             JD.decodeString exampleDecoder encoded
 
         ( old, seed ) =
-            Random.step exampleGenerator (Random.initialSeed 14)
+            Random.step exampleGenerator (Random.initialSeed 0)
 
         ( new, _ ) =
             Random.step exampleGenerator seed
