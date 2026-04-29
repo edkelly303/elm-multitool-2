@@ -18,7 +18,7 @@ type Diff
     | StringChange String
       -- | DictChange DictChanges
       -- | SetChange SetChanges
-    | ListChanges ListChange (List ListChange)
+    | ListChanges (List ListChange)
 
 
 type ListChange
@@ -43,6 +43,7 @@ diff codec old new =
     diffHelp oldIR newIR irType
 
 
+diffHelp : IR.IR -> IR.IR -> IR.IRType -> Diff
 diffHelp oldIR_ newIR_ irType_ =
     if oldIR_ == newIR_ then
         Identical
@@ -65,54 +66,46 @@ diffHelp oldIR_ newIR_ irType_ =
                 IntChange b2
 
             ( IR.List oldList, IR.List newList, IR.ListType itemType ) ->
-                let
-                    changes =
-                        ListDiffer.diffWith (areSimilar itemType) oldList newList
-                            |> List.foldl
-                                (\change { idx, out } ->
-                                    case change of
-                                        ListDiffer.Added newItem ->
-                                            { idx = idx
-                                            , out =
-                                                case List.Extra.elemIndex newItem oldList of
-                                                    Just oldIdx ->
-                                                        Just (Moved oldIdx) :: out
+                ListDiffer.diffWith (areSimilar itemType) oldList newList
+                    |> List.foldl
+                        (\change { idx, out } ->
+                            case change of
+                                ListDiffer.Added newItem ->
+                                    { idx = idx
+                                    , out =
+                                        case List.Extra.elemIndex newItem oldList of
+                                            Just oldIdx ->
+                                                Just (Moved oldIdx) :: out
 
-                                                    Nothing ->
-                                                        Just (Added (diffHelp (default itemType) newItem itemType)) :: out
-                                            }
+                                            Nothing ->
+                                                Just (Added (diffHelp (default itemType) newItem itemType)) :: out
+                                    }
 
-                                        ListDiffer.Removed _ ->
-                                            { idx = idx + 1
-                                            , out = Nothing :: out
-                                            }
+                                ListDiffer.Removed _ ->
+                                    { idx = idx + 1
+                                    , out = Nothing :: out
+                                    }
 
-                                        ListDiffer.Similar _ _ changes_ ->
-                                            { idx = idx + 1
-                                            , out = Just (Updated idx changes_) :: out
-                                            }
+                                ListDiffer.Similar _ _ changes_ ->
+                                    { idx = idx + 1
+                                    , out = Just (Updated idx changes_) :: out
+                                    }
 
-                                        ListDiffer.NoChange _ ->
-                                            { idx = idx + 1
-                                            , out =
-                                                case out of
-                                                    (Just (Existing prevStart _)) :: rest ->
-                                                        Just (Existing prevStart idx) :: rest
+                                ListDiffer.NoChange _ ->
+                                    { idx = idx + 1
+                                    , out =
+                                        case out of
+                                            (Just (Existing prevStart _)) :: rest ->
+                                                Just (Existing prevStart idx) :: rest
 
-                                                    _ ->
-                                                        Just (Existing idx idx) :: out
-                                            }
-                                )
-                                { idx = 0, out = [] }
-                            |> .out
-                            |> List.filterMap identity
-                in
-                case changes of
-                    [] ->
-                        Identical
-
-                    change :: restChanges ->
-                        ListChanges change restChanges
+                                            _ ->
+                                                Just (Existing idx idx) :: out
+                                    }
+                        )
+                        { idx = 0, out = [] }
+                    |> .out
+                    |> List.filterMap identity
+                    |> ListChanges
 
             ( IR.Product fields1, IR.Product fields2, IR.ProductType fieldTypes ) ->
                 let
@@ -229,7 +222,7 @@ size changes =
         --         + (List.map size insertions
         --             |> List.sum
         --           )
-        ListChanges c cs ->
+        ListChanges cs ->
             List.map
                 (\change ->
                     case change of
@@ -245,7 +238,7 @@ size changes =
                         Existing _ _ ->
                             1
                 )
-                (c :: cs)
+                cs
                 |> List.sum
 
         BoolChange _ ->
@@ -341,7 +334,7 @@ patchHelp changes_ old_ irType_ =
         ( FloatChange b, IR.Float _, _ ) ->
             Ok (IR.Float b)
 
-        ( ListChanges c cs, IR.List oldList, IR.ListType itemType ) ->
+        ( ListChanges cs, IR.List oldList, IR.ListType itemType ) ->
             Ok
                 (List.foldl
                     (\change out ->
@@ -380,7 +373,7 @@ patchHelp changes_ old_ irType_ =
                                     :: out
                     )
                     []
-                    (c :: cs)
+                    cs
                     |> List.filterMap identity
                     |> List.concat
                     |> IR.List
