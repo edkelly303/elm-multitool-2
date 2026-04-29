@@ -26,7 +26,8 @@ type ListChange
     = Added Diff
     | Moved Int
     | Updated Int Diff
-    | Existing Int Int
+    | RangeForward Int Int
+    | RangeBackward Int Int
     | Repeat Int ListChange
 
 
@@ -97,11 +98,11 @@ diffHelp oldIR_ newIR_ irType_ =
                                     { idx = idx + 1
                                     , out =
                                         case out of
-                                            (Just (Existing prevStart _)) :: rest ->
-                                                Just (Existing prevStart idx) :: rest
+                                            (Just (RangeForward prevStart _)) :: rest ->
+                                                Just (RangeForward prevStart idx) :: rest
 
                                             _ ->
-                                                Just (Existing idx idx) :: out
+                                                Just (RangeForward idx idx) :: out
                                     }
                         )
                         { idx = 0, out = [] }
@@ -195,14 +196,14 @@ coalesceForwardMoveSequences list =
 
                 ( (Moved prevMove) :: restPrevItems, Moved move ) ->
                     if prevMove == move - 1 then
-                        Existing prevMove move :: restPrevItems
+                        RangeForward prevMove move :: restPrevItems
 
                     else
                         item :: prev
 
-                ( (Existing start end) :: restPrevItems, Moved move ) ->
+                ( (RangeForward start end) :: restPrevItems, Moved move ) ->
                     if end == move - 1 then
-                        Existing start move :: restPrevItems
+                        RangeForward start move :: restPrevItems
 
                     else
                         item :: prev
@@ -224,14 +225,14 @@ coalesceBackwardMoveSequences list =
 
                 ( (Moved prevMove) :: restPrevItems, Moved move ) ->
                     if prevMove == move - 1 then
-                        Existing move prevMove :: restPrevItems
+                        RangeBackward move prevMove :: restPrevItems
 
                     else
                         item :: prev
 
-                ( (Existing end start) :: restPrevItems, Moved move ) ->
+                ( (RangeBackward end start) :: restPrevItems, Moved move ) ->
                     if end == move - 1 then
-                        Existing move start :: restPrevItems
+                        RangeBackward move start :: restPrevItems
 
                     else
                         item :: prev
@@ -326,7 +327,10 @@ size changes =
                         Updated _ updatedC ->
                             size updatedC
 
-                        Existing _ _ ->
+                        RangeForward _ _ ->
+                            1
+
+                        RangeBackward _ _ ->
                             1
 
                         Repeat _ _ ->
@@ -568,19 +572,18 @@ listPatchHelp change oldList itemType =
                 |> Result.toMaybe
                 |> Maybe.map List.singleton
 
-        Existing start end ->
-            if start < end then
-                oldList
-                    |> List.drop start
-                    |> List.take (1 + end - start)
-                    |> Just
+        RangeForward start end ->
+            oldList
+                |> List.drop start
+                |> List.take (1 + end - start)
+                |> Just
 
-            else
-                oldList
-                    |> List.drop end
-                    |> List.take (1 + start - end)
-                    |> List.reverse
-                    |> Just
+        RangeBackward start end ->
+            oldList
+                |> List.drop end
+                |> List.take (1 + start - end)
+                |> List.reverse
+                |> Just
 
         Repeat length change_ ->
             listPatchHelp change_ oldList itemType

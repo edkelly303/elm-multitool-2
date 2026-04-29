@@ -77,7 +77,7 @@ diffTests =
     Test.describe "Diff"
         [ roundTrip recordCodec "record"
         , roundTrip IR.int "int"
-        , roundTrip (IR.list IR.int) "list int"
+        , roundTrip (IR.list IR.bool) "list bool"
         ]
 
 
@@ -92,6 +92,7 @@ roundTrip codec name =
             let
                 diff =
                     Adapters.Diff.diff codec old new
+                    |> Debug.log "diff"
             in
             Adapters.Diff.patch codec diff old
                 |> Expect.equal (Ok new)
