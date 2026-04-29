@@ -92,7 +92,6 @@ roundTrip codec name =
             let
                 diff =
                     Adapters.Diff.diff codec old new
-                    |> Debug.log "diff"
             in
             Adapters.Diff.patch codec diff old
                 |> Expect.equal (Ok new)
