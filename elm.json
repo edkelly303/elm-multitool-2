@@ -17,7 +17,6 @@
         "elm-community/random-extra": "3.2.0 <= v < 4.0.0",
         "elm-explorations/test": "2.2.1 <= v < 3.0.0",
         "elmcraft/core-extra": "2.2.0 <= v < 3.0.0",
-        "miniBill/elm-codec": "2.3.1 <= v < 3.0.0",
         "miniBill/elm-diff": "1.1.2 <= v < 2.0.0"
     },
     "test-dependencies": {}
