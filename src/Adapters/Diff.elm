@@ -4,6 +4,7 @@ import Dict
 import Diff as ListDiffer
 import IR
 import List.Extra
+import Maybe.Extra
 import Result.Extra
 
 
@@ -26,6 +27,7 @@ type ListChange
     | Moved Int
     | Updated Int Diff
     | Existing Int Int
+    | Run Int ListChange
 
 
 diff : IR.Codec output output -> output -> output -> Diff
@@ -105,6 +107,7 @@ diffHelp oldIR_ newIR_ irType_ =
                         { idx = 0, out = [] }
                     |> .out
                     |> List.filterMap identity
+                    |> doRunLengthEncoding
                     |> ListChanges
 
             ( IR.Product fields1, IR.Product fields2, IR.ProductType fieldTypes ) ->
@@ -181,6 +184,34 @@ diffHelp oldIR_ newIR_ irType_ =
                 Identical
 
 
+doRunLengthEncoding : List ListChange -> List ListChange
+doRunLengthEncoding list =
+    List.foldr
+        (\item prev ->
+            case prev of
+                [] ->
+                    [ item ]
+
+                prevItem :: restPrevItems ->
+                    case prevItem of
+                        Run length runItem ->
+                            if item == runItem then
+                                Run (length + 1) runItem :: restPrevItems
+
+                            else
+                                item :: prev
+
+                        _ ->
+                            if item == prevItem then
+                                Run 2 item :: restPrevItems
+
+                            else
+                                item :: prev
+        )
+        []
+        list
+
+
 areSimilar : IR.IRType -> IR.IR -> IR.IR -> Maybe Diff
 areSimilar irType old new =
     let
@@ -236,6 +267,9 @@ size changes =
                             size updatedC
 
                         Existing _ _ ->
+                            1
+
+                        Run _ _ ->
                             1
                 )
                 cs
@@ -338,39 +372,7 @@ patchHelp changes_ old_ irType_ =
             Ok
                 (List.foldl
                     (\change out ->
-                        case change of
-                            Added itemDiff ->
-                                (patchHelp itemDiff (default itemType) itemType
-                                    |> Result.toMaybe
-                                    |> Maybe.map List.singleton
-                                )
-                                    :: out
-
-                            Moved idx ->
-                                (List.Extra.getAt idx oldList
-                                    |> Maybe.map List.singleton
-                                )
-                                    :: out
-
-                            Updated idx itemDiff ->
-                                let
-                                    oldItem =
-                                        List.Extra.getAt idx oldList
-                                            |> Maybe.withDefault (default itemType)
-                                in
-                                (patchHelp itemDiff oldItem itemType
-                                    |> Result.toMaybe
-                                    |> Maybe.map List.singleton
-                                )
-                                    :: out
-
-                            Existing start end ->
-                                (oldList
-                                    |> List.drop start
-                                    |> List.take (1 + end - start)
-                                    |> Just
-                                )
-                                    :: out
+                        listPatchHelp change oldList itemType :: out
                     )
                     []
                     cs
@@ -482,3 +484,38 @@ patchHelp changes_ old_ irType_ =
 
         ( diff_, old__, type_ ) ->
             Err ("mismatch between \n" ++ Debug.toString diff_ ++ "\n" ++ Debug.toString old__ ++ "\n" ++ Debug.toString type_)
+
+
+listPatchHelp : ListChange -> List IR.IR -> IR.IRType -> Maybe (List IR.IR)
+listPatchHelp change oldList itemType =
+    case change of
+        Added itemDiff ->
+            patchHelp itemDiff (default itemType) itemType
+                |> Result.toMaybe
+                |> Maybe.map List.singleton
+
+        Moved idx ->
+            List.Extra.getAt idx oldList
+                |> Maybe.map List.singleton
+
+        Updated idx itemDiff ->
+            let
+                oldItem =
+                    List.Extra.getAt idx oldList
+                        |> Maybe.withDefault (default itemType)
+            in
+            patchHelp itemDiff oldItem itemType
+                |> Result.toMaybe
+                |> Maybe.map List.singleton
+
+        Existing start end ->
+            oldList
+                |> List.drop start
+                |> List.take (1 + end - start)
+                |> Just
+
+        Run length change_ ->
+            listPatchHelp change_ oldList itemType
+                |> List.repeat length
+                |> Maybe.Extra.combine
+                |> Maybe.map List.concat
