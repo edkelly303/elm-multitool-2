@@ -74,7 +74,7 @@ exhaustiveAdapter irType =
             -- the values of the fields... but it'll do for now.
             Exhaustive.new
                 (\nth ->
-                    List.foldl
+                    List.foldr
                         (\field acc ->
                             acc
                                 |> Maybe.andThen
@@ -88,7 +88,7 @@ exhaustiveAdapter irType =
                                     )
                         )
                         (Just [])
-                        (List.reverse fields)
+                        fields
                 )
                 |> Exhaustive.map IR.Product
 
