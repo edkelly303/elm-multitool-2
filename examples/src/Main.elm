@@ -54,16 +54,16 @@ exampleCodec =
 main : Html.Html msg
 main =
     let
-        codec = IR.list IR.int
-            --exampleCodec
+        codec = 
+            IR.list exampleCodec
 
-        old = [0,1,2]
-            -- Random.step (Adapters.Random.generator codec) (Random.initialSeed 14)
-            --     |> Tuple.first
+        old = 
+            Random.step (Adapters.Random.generator codec) (Random.initialSeed 14)
+                |> Tuple.first
 
-        new =[0,1,2,2,1,0,2,1,0]
-            -- Random.step (Adapters.Random.generator codec) (Random.initialSeed 15)
-            --     |> Tuple.first
+        new =
+            Random.step (Adapters.Random.generator codec) (Random.initialSeed 16)
+                |> Tuple.first
 
         diff =
             Adapters.Diff.diff codec old new
