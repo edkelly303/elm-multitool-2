@@ -1,6 +1,6 @@
 module IR exposing
     ( Codec
-    , IR(..), Variant(..), fromInput, toOutput, Error(..)
+    , IR(..), IRValue(..), Variant(..), fromInput, toOutput, Error(..)
     , IRType(..), VariantType(..), irType
     , bool, char, string, int, float
     , list, array, dict, maybe, result, tuple, triple
@@ -24,7 +24,7 @@ Convert between Elm data types and an intermediate representation (IR)
 
 ## IR values
 
-@docs IR, Variant, fromInput, toOutput, Error
+@docs IR, IRValue, Variant, fromInput, toOutput, Error
 
 
 ## IR types
