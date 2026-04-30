@@ -4,6 +4,11 @@ module DocumentationCodeSnippetTest exposing (tests)
 -}
 
 import Expect
+import Fuzz
+import IR
+import IR.Fuzz
+import IR.Json
+import Json.Decode
 import Test
 
 
@@ -11,7 +16,79 @@ tests : Test.Test
 tests =
     Test.describe
         "documentation code snippets"
-        [ Test.test
-            "currently none. Since having no code snippets is perfectly fine, adding this simple test tells elm-test that everything's good (empty tests fail or throw warnings)"
-            (\() -> Expect.pass)
+        [ Test.describe
+            "readme"
+            [ Test.describe
+                "code snippet 0"
+                [ Test.test
+                    "0"
+                    (\() ->
+                        ir__Readme_0
+                            |> Expect.equal
+                                (IR.Product [ IR.Int 44, IR.String "Ed" ])
+                    )
+                , Test.test
+                    "1"
+                    (\() ->
+                        output__Readme_0
+                            |> Expect.equal (Result.Ok input__Readme_0)
+                    )
+                , Test.test
+                    "2"
+                    (\() ->
+                        let
+                            unused : Json.Decode.Value
+                            unused =
+                                json__Readme_0
+                        in
+                        Expect.pass
+                    )
+                , Test.test
+                    "3"
+                    (\() ->
+                        decoded__Readme_0
+                            |> Expect.equal (Result.Ok input__Readme_0)
+                    )
+                , Test.test
+                    "4"
+                    (\() ->
+                        fuzzed__Readme_0
+                            |> Expect.equal [ { name = "", age = 105 } ]
+                    )
+                ]
+            ]
         ]
+
+
+type alias User__Readme_0 =
+    { name : String.String, age : Basics.Int }
+
+
+input__Readme_0 =
+    { name = "Ed", age = 44 }
+
+
+codec__Readme_0 =
+    IR.succeed User__Readme_0
+        |> IR.andMap .name IR.string
+        |> IR.andMap .age IR.int
+
+
+ir__Readme_0 =
+    IR.fromInput codec__Readme_0 input__Readme_0
+
+
+output__Readme_0 =
+    IR.toOutput codec__Readme_0 ir__Readme_0
+
+
+json__Readme_0 =
+    IR.Json.encode codec__Readme_0 input__Readme_0
+
+
+decoded__Readme_0 =
+    Json.Decode.decodeValue (IR.Json.decoder codec__Readme_0) json__Readme_0
+
+
+fuzzed__Readme_0 =
+    Fuzz.examples 1 (IR.Fuzz.fuzzer codec__Readme_0)
