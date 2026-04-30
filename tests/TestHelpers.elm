@@ -1,8 +1,6 @@
 module TestHelpers exposing (..)
 
-import Fuzz exposing (Fuzzer)
 import IR
-import IR.Fuzz
 
 
 type alias Record =
@@ -50,7 +48,3 @@ customCodec =
         |> IR.variant1 Var1 (IR.list IR.bool)
         |> IR.variant2 Var2 IR.int (IR.tuple IR.bool IR.char)
         |> IR.endCustom
-
-
-
-
